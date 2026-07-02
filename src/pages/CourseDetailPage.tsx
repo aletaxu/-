@@ -85,49 +85,58 @@ export const CourseDetailPage = () => {
       </div>
 
       <section className="card-gradient p-8">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">课程大纲</h2>
-        
-        <div className="space-y-4">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
+          <h2 className="text-2xl font-bold text-gray-800">课程大纲</h2>
+          <span className="text-sm text-gray-500">所有模块均已开放，可任意选择学习</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {course.modules.map((module, index) => {
             return (
               <div
                 key={module.id}
-                className={`flex items-center gap-4 p-4 rounded-xl transition-all cursor-pointer ${
+                className={`group flex flex-col p-5 rounded-2xl transition-all cursor-pointer hover:-translate-y-1 hover:shadow-lg ${
                   module.completed
                     ? 'bg-green-50 border-2 border-green-200'
-                    : 'bg-white border-2 border-gray-100 hover:border-primary-200'
+                    : 'bg-white border-2 border-gray-100 hover:border-primary-300'
                 }`}
                 onClick={() => navigate(`/learn/${course.id}/${module.id}`)}
               >
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                  module.completed
-                    ? 'bg-green-500'
-                    : 'bg-gradient-to-br from-primary-500 to-accent-500'
-                }`}>
-                  {module.completed ? (
-                    <CheckCircle2 className="w-6 h-6 text-white" />
-                  ) : (
-                    <span className="text-white font-bold">{index + 1}</span>
-                  )}
-                </div>
-                
-                <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-semibold text-gray-800">{module.title}</h3>
-                    <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-600">
-                      {moduleTypeNames[module.type as keyof typeof moduleTypeNames]}
-                    </span>
+                <div className="flex items-center justify-between mb-3">
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+                    module.completed
+                      ? 'bg-green-500'
+                      : 'bg-gradient-to-br from-primary-500 to-accent-500'
+                  }`}>
+                    {module.completed ? (
+                      <CheckCircle2 className="w-6 h-6 text-white" />
+                    ) : (
+                      <span className="text-white font-bold">{index + 1}</span>
+                    )}
                   </div>
-                  <p className="text-gray-500 text-sm mt-1">{module.duration}小时</p>
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-600">
+                    {moduleTypeNames[module.type as keyof typeof moduleTypeNames]}
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-gray-800 mb-1 group-hover:text-primary-700 transition-colors">
+                  {module.title}
+                </h3>
+                <p className="text-gray-500 text-sm mb-4">{module.duration}小时</p>
+
+                <div className="mt-auto flex items-center gap-1 text-sm">
                   {module.completed ? (
-                    <span className="text-green-600 font-medium">已完成</span>
+                    <span className="text-green-600 font-medium flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" />
+                      已完成 · 可复习
+                    </span>
                   ) : (
-                    <span className="text-gray-400">点击开始</span>
+                    <span className="text-primary-600 font-medium flex items-center gap-1">
+                      <Play className="w-4 h-4" />
+                      直接开始
+                    </span>
                   )}
-                  <ChevronRight className="w-5 h-5 text-gray-400" />
+                  <ChevronRight className="w-4 h-4 text-gray-400 ml-auto group-hover:text-primary-500 transition-colors" />
                 </div>
               </div>
             );
@@ -146,7 +155,7 @@ export const CourseDetailPage = () => {
           className="mt-8 w-full btn-primary flex items-center justify-center gap-2"
         >
           <Play className="w-5 h-5" />
-          <span>开始学习</span>
+          <span>继续学习</span>
         </button>
       </section>
 

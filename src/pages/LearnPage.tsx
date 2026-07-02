@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, RotateCcw } from 'lucide-react';
 import { getCourseById } from '../data/courses';
+import { moduleTypeNames } from '../types';
 import { VocabularyModule } from '../components/LearningModules/VocabularyModule';
 import { GrammarModule } from '../components/LearningModules/GrammarModule';
 import { SpeakingModule } from '../components/LearningModules/SpeakingModule';
@@ -80,36 +81,27 @@ export const LearnPage = () => {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        {course.modules.map((module) => (
-          <div
-            key={module.id}
-            className={`flex-1 h-2 rounded-full transition-all ${
-              module.id === moduleId
-                ? 'bg-gradient-to-r from-primary-500 to-accent-500'
-                : module.completed
-                ? 'bg-green-500'
-                : 'bg-gray-200'
-            }`}
-          ></div>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-3">
-        {course.modules.map((module, index) => (
-          <span
-            key={module.id}
-            className={`text-sm font-medium ${
-              module.id === moduleId
-                ? 'text-primary-600'
-                : module.completed
-                ? 'text-green-600'
-                : 'text-gray-400'
-            }`}
-          >
-            {index + 1}
-          </span>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        {course.modules.map((module, index) => {
+          const isCurrent = module.id === moduleId;
+          return (
+            <button
+              key={module.id}
+              onClick={() => navigate(`/learn/${courseId}/${module.id}`)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                isCurrent
+                  ? 'bg-gradient-to-r from-primary-500 to-accent-500 text-white shadow'
+                  : module.completed
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title={module.title}
+            >
+              <span>{index + 1}</span>
+              <span className="hidden sm:inline">{moduleTypeNames[module.type as keyof typeof moduleTypeNames]}</span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="card-gradient p-8">
