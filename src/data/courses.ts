@@ -74,6 +74,7 @@ export const courses: Course[] = [
       { id: 'jp-grammar-1', title: '基础语法', type: 'grammar', duration: 15, completed: true },
       { id: 'jp-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: true },
       { id: 'jp-listening-1', title: '听力入门', type: 'listening', duration: 8, completed: false },
+      { id: 'jp-reading-1', title: '阅读理解：日本の朝', type: 'reading', duration: 8, completed: false },
     ],
   },
   {
@@ -92,6 +93,7 @@ export const courses: Course[] = [
       { id: 'jp-grammar-2', title: '敬语语法', type: 'grammar', duration: 20, completed: false },
       { id: 'jp-speaking-2', title: '商务会话', type: 'speaking', duration: 12, completed: false },
       { id: 'jp-listening-2', title: '职场听力', type: 'listening', duration: 8, completed: false },
+      { id: 'jp-reading-2', title: '阅读理解：日本のビジネス文化', type: 'reading', duration: 12, completed: false },
     ],
   },
   {
@@ -110,6 +112,7 @@ export const courses: Course[] = [
       { id: 'kr-grammar-1', title: '基础语法', type: 'grammar', duration: 12, completed: false },
       { id: 'kr-speaking-1', title: '日常对话', type: 'speaking', duration: 10, completed: false },
       { id: 'kr-listening-1', title: '听力入门', type: 'listening', duration: 8, completed: false },
+      { id: 'kr-reading-1', title: '阅读理解：서울의 하루', type: 'reading', duration: 8, completed: false },
     ],
   },
   {
@@ -128,6 +131,7 @@ export const courses: Course[] = [
       { id: 'kr-grammar-2', title: '实用语法', type: 'grammar', duration: 14, completed: false },
       { id: 'kr-speaking-2', title: '情景对话', type: 'speaking', duration: 12, completed: false },
       { id: 'kr-listening-2', title: '歌曲听力', type: 'listening', duration: 10, completed: false },
+      { id: 'kr-reading-2', title: '阅读理解：한국의 대중문화', type: 'reading', duration: 12, completed: false },
     ],
   },
   {
@@ -146,6 +150,7 @@ export const courses: Course[] = [
       { id: 'eng-grammar-4', title: '复杂语法', type: 'grammar', duration: 25, completed: false },
       { id: 'eng-speaking-4', title: '口语考试', type: 'speaking', duration: 18, completed: false },
       { id: 'eng-listening-4', title: '听力考试', type: 'listening', duration: 17, completed: false },
+      { id: 'eng-reading-4', title: '阅读理解：学术阅读技巧', type: 'reading', duration: 20, completed: false },
     ],
   },
   // ============ 法语 ============
@@ -165,6 +170,7 @@ export const courses: Course[] = [
       { id: 'fr-grammar-1', title: '基础语法', type: 'grammar', duration: 12, completed: false },
       { id: 'fr-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: false },
       { id: 'fr-listening-1', title: '听力入门', type: 'listening', duration: 10, completed: false },
+      { id: 'fr-reading-1', title: '阅读理解：Une matinée à Paris', type: 'reading', duration: 8, completed: false },
     ],
   },
   {
@@ -183,6 +189,7 @@ export const courses: Course[] = [
       { id: 'fr-grammar-2', title: '进阶语法', type: 'grammar', duration: 14, completed: false },
       { id: 'fr-speaking-2', title: '情景对话', type: 'speaking', duration: 12, completed: false },
       { id: 'fr-listening-2', title: '影视听力', type: 'listening', duration: 12, completed: false },
+      { id: 'fr-reading-2', title: '阅读理解：La culture française', type: 'reading', duration: 12, completed: false },
     ],
   },
   // ============ 西班牙语 ============
@@ -202,6 +209,7 @@ export const courses: Course[] = [
       { id: 'es-grammar-1', title: '基础语法', type: 'grammar', duration: 12, completed: false },
       { id: 'es-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: false },
       { id: 'es-listening-1', title: '听力入门', type: 'listening', duration: 8, completed: false },
+      { id: 'es-reading-1', title: '阅读理解：Una mañana en Madrid', type: 'reading', duration: 8, completed: false },
     ],
   },
   {
@@ -220,6 +228,7 @@ export const courses: Course[] = [
       { id: 'es-grammar-2', title: '进阶语法', type: 'grammar', duration: 14, completed: false },
       { id: 'es-speaking-2', title: '情景对话', type: 'speaking', duration: 12, completed: false },
       { id: 'es-listening-2', title: '音乐听力', type: 'listening', duration: 10, completed: false },
+      { id: 'es-reading-2', title: '阅读理解：La cultura latinoamericana', type: 'reading', duration: 12, completed: false },
     ],
   },
   // ============ 德语 ============
@@ -239,6 +248,7 @@ export const courses: Course[] = [
       { id: 'de-grammar-1', title: '基础语法', type: 'grammar', duration: 14, completed: false },
       { id: 'de-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: false },
       { id: 'de-listening-1', title: '听力入门', type: 'listening', duration: 9, completed: false },
+      { id: 'de-reading-1', title: '阅读理解：Ein Morgen in Berlin', type: 'reading', duration: 8, completed: false },
     ],
   },
   {
@@ -257,6 +267,7 @@ export const courses: Course[] = [
       { id: 'de-grammar-2', title: '进阶语法', type: 'grammar', duration: 16, completed: false },
       { id: 'de-speaking-2', title: '商务会话', type: 'speaking', duration: 13, completed: false },
       { id: 'de-listening-2', title: '职场听力', type: 'listening', duration: 12, completed: false },
+      { id: 'de-reading-2', title: '阅读理解：Die deutsche Arbeitskultur', type: 'reading', duration: 12, completed: false },
     ],
   },
   // ============ 意大利语 ============
@@ -276,6 +287,7 @@ export const courses: Course[] = [
       { id: 'it-grammar-1', title: '基础语法', type: 'grammar', duration: 12, completed: false },
       { id: 'it-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: false },
       { id: 'it-listening-1', title: '听力入门', type: 'listening', duration: 8, completed: false },
+      { id: 'it-reading-1', title: '阅读理解：Una mattina a Roma', type: 'reading', duration: 8, completed: false },
     ],
   },
   // ============ 葡萄牙语 ============
@@ -295,6 +307,7 @@ export const courses: Course[] = [
       { id: 'pt-grammar-1', title: '基础语法', type: 'grammar', duration: 12, completed: false },
       { id: 'pt-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: false },
       { id: 'pt-listening-1', title: '听力入门', type: 'listening', duration: 10, completed: false },
+      { id: 'pt-reading-1', title: '阅读理解：Uma manhã no Rio', type: 'reading', duration: 8, completed: false },
     ],
   },
   // ============ 俄语 ============
@@ -314,6 +327,7 @@ export const courses: Course[] = [
       { id: 'ru-grammar-1', title: '基础语法', type: 'grammar', duration: 14, completed: false },
       { id: 'ru-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: false },
       { id: 'ru-listening-1', title: '听力入门', type: 'listening', duration: 9, completed: false },
+      { id: 'ru-reading-1', title: '阅读理解：Утро в Москве', type: 'reading', duration: 8, completed: false },
     ],
   },
   // ============ 阿拉伯语 ============
@@ -335,6 +349,7 @@ export const courses: Course[] = [
       { id: 'th-grammar-1', title: '基础语法', type: 'grammar', duration: 10, completed: false },
       { id: 'th-speaking-1', title: '旅行会话', type: 'speaking', duration: 10, completed: false },
       { id: 'th-listening-1', title: '听力入门', type: 'listening', duration: 8, completed: false },
+      { id: 'th-reading-1', title: '阅读理解：เช้าวันหนึ่งในกรุงเทพ', type: 'reading', duration: 8, completed: false },
     ],
   },
   // ============ 芬兰语 ============
@@ -354,6 +369,7 @@ export const courses: Course[] = [
       { id: 'fi-grammar-1', title: '基础语法', type: 'grammar', duration: 12, completed: false },
       { id: 'fi-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: false },
       { id: 'fi-listening-1', title: '听力入门', type: 'listening', duration: 10, completed: false },
+      { id: 'fi-reading-1', title: '阅读理解：Aamu Helsingissä', type: 'reading', duration: 8, completed: false },
     ],
   },
   {
@@ -372,6 +388,7 @@ export const courses: Course[] = [
       { id: 'fi-grammar-2', title: '进阶语法', type: 'grammar', duration: 12, completed: false },
       { id: 'fi-speaking-2', title: '情景对话', type: 'speaking', duration: 12, completed: false },
       { id: 'fi-listening-2', title: '自然听力', type: 'listening', duration: 12, completed: false },
+      { id: 'fi-reading-2', title: '阅读理解：Suomen luonto ja kulttuuri', type: 'reading', duration: 12, completed: false },
     ],
   },
   // ============ 挪威语 ============
@@ -391,6 +408,7 @@ export const courses: Course[] = [
       { id: 'no-grammar-1', title: '基础语法', type: 'grammar', duration: 10, completed: false },
       { id: 'no-speaking-1', title: '日常会话', type: 'speaking', duration: 10, completed: false },
       { id: 'no-listening-1', title: '听力入门', type: 'listening', duration: 10, completed: false },
+      { id: 'no-reading-1', title: '阅读理解：En morgen i Oslo', type: 'reading', duration: 8, completed: false },
     ],
   },
   {
@@ -409,6 +427,7 @@ export const courses: Course[] = [
       { id: 'no-grammar-2', title: '进阶语法', type: 'grammar', duration: 12, completed: false },
       { id: 'no-speaking-2', title: '情景对话', type: 'speaking', duration: 12, completed: false },
       { id: 'no-listening-2', title: '新闻听力', type: 'listening', duration: 10, completed: false },
+      { id: 'no-reading-2', title: '阅读理解：Norsk kultur og samfunn', type: 'reading', duration: 12, completed: false },
     ],
   },
 ];
