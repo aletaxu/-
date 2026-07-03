@@ -16,6 +16,7 @@
 // 3. 多语言映射——前端 Language 联合类型 → 各 API 的语言代码
 
 import { cachedFetch } from '../utils/cache';
+import { getTodayKey, getDailySeed, seededPick } from '../utils/dailySeed';
 import type { Language, ReadingArticle, ReadingCategory } from '../types';
 
 // ============ 语言代码映射 ============
@@ -351,3 +352,73 @@ export const supportsWikipedia = (language: Language): boolean =>
 /** 该语种是否支持 Project Gutenberg 实时拉取 */
 export const supportsGutenberg = (language: Language): boolean =>
   !!gutendexLangCode[language];
+
+// ============ 每日推荐：每天固定 5-8 篇 ============
+
+/**
+ * 拉取某语种「今日 Wikipedia 推荐」——同一天访问结果稳定，第二天自动刷新
+ * 当天首次访问时并发拉取 count 篇随机条目，过滤过短的后缓存
+ * @param language 目标语种
+ * @param count 每日篇数（默认6）
+ */
+export const fetchDailyWikipediaArticles = async (
+  language: Language,
+  count = 6
+): Promise<WikipediaArticle[]> => {
+  if (!supportsWikipedia(language)) return [];
+  const todayKey = getTodayKey();
+  const cacheKey = `daily_wiki_${language}_${todayKey}`;
+
+  try {
+    return await cachedFetch<WikipediaArticle[]>(
+      cacheKey,
+      async () => {
+        // 并发拉 count + 2 篇，过滤过短/失败的，取前 count 篇
+        const fetchCount = count + 2;
+        const results = await Promise.all(
+          Array.from({ length: fetchCount }, () => fetchRandomWikipediaArticle(language))
+        );
+        const valid = results.filter((w): w is WikipediaArticle =>
+          !!w && w.extract.length >= 120
+        );
+        // 用日期种子确定性挑选（虽然 random 本身随机，但当天缓存后稳定）
+        const seed = getDailySeed() + language.length * 11;
+        return seededPick(valid, seed, Math.min(count, valid.length));
+      },
+      20 * 60 * 60 * 1000 // 20小时
+    );
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * 拉取某语种「今日 Gutenberg 书单」——同一天访问结果稳定，第二天自动刷新
+ * @param language 目标语种
+ * @param count 每日书目数（默认6）
+ */
+export const fetchDailyGutenbergBooks = async (
+  language: Language,
+  count = 6
+): Promise<GutenbergBook[]> => {
+  if (!supportsGutenberg(language)) return [];
+  const todayKey = getTodayKey();
+  const cacheKey = `daily_gutenberg_${language}_${todayKey}`;
+
+  try {
+    return await cachedFetch<GutenbergBook[]>(
+      cacheKey,
+      async () => {
+        // 拉取热门书单（多拉一些供挑选）
+        const all = await fetchGutenbergBooks(language, undefined, 24);
+        if (all.length === 0) return [];
+        // 用日期种子确定性挑选 count 本
+        const seed = getDailySeed() + language.length * 13;
+        return seededPick(all, seed, Math.min(count, all.length));
+      },
+      20 * 60 * 60 * 1000 // 20小时
+    );
+  } catch {
+    return [];
+  }
+};

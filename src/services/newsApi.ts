@@ -15,6 +15,7 @@
 // 4. 兜底多源——同一语种配置多个 RSS 源，单个失败自动尝试下一个
 
 import { cachedFetch } from '../utils/cache';
+import { getTodayKey, getDailySeed, seededPick } from '../utils/dailySeed';
 import type { Language, ReadingArticle, ReadingCategory } from '../types';
 
 // ============ RSS 源配置（按语种分组） ============
@@ -333,3 +334,36 @@ export const getNewsSourcesByLanguage = (language: Language): NewsSource[] =>
 /** 该语种是否接入新闻源 */
 export const supportsNews = (language: Language): boolean =>
   newsSources.some(s => s.language === language);
+
+// ============ 每日推荐：每天固定 5-8 篇 ============
+
+/**
+ * 拉取某语种「今日新闻推荐」——同一天访问结果稳定，第二天自动刷新
+ * 每个语种每天从全部新闻中确定性挑选 count 篇
+ * @param language 目标语种
+ * @param count 每日篇数（默认6，范围5-8）
+ */
+export const fetchDailyNews = async (
+  language: Language,
+  count = 6
+): Promise<NewsItem[]> => {
+  const todayKey = getTodayKey();
+  const cacheKey = `daily_news_${language}_${todayKey}`;
+
+  try {
+    return await cachedFetch<NewsItem[]>(
+      cacheKey,
+      async () => {
+        // 拉取该语种所有源的最新头条（每源多拉一些供挑选）
+        const all = await fetchNewsByLanguage(language, 8);
+        if (all.length === 0) return [];
+        // 用日期种子确定性挑选 count 篇
+        const seed = getDailySeed() + language.length * 7;
+        return seededPick(all, seed, Math.min(count, all.length));
+      },
+      20 * 60 * 60 * 1000 // 20小时，确保第二天前刷新
+    );
+  } catch {
+    return [];
+  }
+};

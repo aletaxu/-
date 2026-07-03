@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Clock, ArrowRight, Sparkles, Newspaper, Globe, BookMarked, Loader2, Search, Radio } from 'lucide-react';
+import { BookOpen, Clock, ArrowRight, Sparkles, Newspaper, Globe, BookMarked, Loader2, Search, Radio, Calendar } from 'lucide-react';
 import { readingArticles } from '../data/reading';
 import { languageNames, levelNames } from '../types';
 import type { Language, Level, ReadingCategory } from '../types';
@@ -8,6 +8,8 @@ import {
   fetchRandomWikipediaArticle,
   fetchWikipediaArticleByTopic,
   fetchGutenbergBooks,
+  fetchDailyWikipediaArticles,
+  fetchDailyGutenbergBooks,
   wikipediaToReadingArticle,
   gutenbergToReadingArticle,
   supportsWikipedia,
@@ -17,6 +19,7 @@ import {
 } from '../services/externalCorpusApi';
 import {
   fetchNewsByLanguage,
+  fetchDailyNews,
   searchNewsByKeyword,
   newsToReadingArticle,
   getNewsSourcesByLanguage,
@@ -97,6 +100,56 @@ export const ReadingHubPage = () => {
   const [loadingNews, setLoadingNews] = useState(false);
   const [newsError, setNewsError] = useState('');
   const [newsKeyword, setNewsKeyword] = useState('');
+
+  // ============ 每日推荐状态（每天固定 5-8 篇，自动加载） ============
+  const [dailyNews, setDailyNews] = useState<NewsItem[]>([]);
+  const [dailyWiki, setDailyWiki] = useState<WikipediaArticle[]>([]);
+  const [dailyBooks, setDailyBooks] = useState<GutenbergBook[]>([]);
+  const [loadingDailyNews, setLoadingDailyNews] = useState(false);
+  const [loadingDailyWiki, setLoadingDailyWiki] = useState(false);
+  const [loadingDailyBooks, setLoadingDailyBooks] = useState(false);
+
+  // 切换语种时自动加载该语种的「今日推荐」（每天 5-8 篇）
+  useEffect(() => {
+    let cancelled = false;
+    const loadDaily = async () => {
+      // 新闻每日推荐
+      if (supportsNews(corpusLang)) {
+        setLoadingDailyNews(true);
+        const items = await fetchDailyNews(corpusLang, 6);
+        if (!cancelled) {
+          setDailyNews(items);
+          setLoadingDailyNews(false);
+        }
+      } else {
+        setDailyNews([]);
+      }
+      // Wikipedia 每日推荐
+      if (supportsWikipedia(corpusLang)) {
+        setLoadingDailyWiki(true);
+        const wikis = await fetchDailyWikipediaArticles(corpusLang, 6);
+        if (!cancelled) {
+          setDailyWiki(wikis);
+          setLoadingDailyWiki(false);
+        }
+      } else {
+        setDailyWiki([]);
+      }
+      // Gutenberg 每日推荐
+      if (supportsGutenberg(corpusLang)) {
+        setLoadingDailyBooks(true);
+        const books = await fetchDailyGutenbergBooks(corpusLang, 6);
+        if (!cancelled) {
+          setDailyBooks(books);
+          setLoadingDailyBooks(false);
+        }
+      } else {
+        setDailyBooks([]);
+      }
+    };
+    loadDaily();
+    return () => { cancelled = true; };
+  }, [corpusLang]);
 
   // 在线语料可选语言（英/德/法为主，兼顾其他 Gutenberg 支持的语种）
   const corpusLangOptions: { value: Language; label: string; wiki: boolean; gutenberg: boolean }[] = [
@@ -366,7 +419,7 @@ export const ReadingHubPage = () => {
         </div>
 
         {/* 语种选择 */}
-        <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-6">
           {corpusLangOptions.map(opt => (
             <button
               key={opt.value}
@@ -386,6 +439,146 @@ export const ReadingHubPage = () => {
               {opt.label}
             </button>
           ))}
+        </div>
+
+        {/* ============ 今日推荐：每个模块每天 5-8 篇，自动加载 ============ */}
+        <div className="mb-8 p-5 bg-gradient-to-br from-primary-50 to-accent-50 rounded-xl border border-primary-100">
+          <div className="flex items-center gap-2 mb-4">
+            <Calendar className="w-5 h-5 text-primary-600" />
+            <h3 className="text-lg font-bold text-gray-800">今日推荐</h3>
+            <span className="text-xs text-gray-500">
+              · {languageNames[corpusLang]} · 每个模块每天精选 5-8 篇，次日自动更新
+            </span>
+          </div>
+
+          {/* 今日新闻 */}
+          {supportsNews(corpusLang) && (
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Radio className="w-4 h-4 text-red-500" />
+                <h4 className="font-semibold text-gray-700 text-sm">今日新闻 · {dailyNews.length} 篇</h4>
+                {loadingDailyNews && <Loader2 className="w-3 h-3 animate-spin text-red-400" />}
+              </div>
+              {dailyNews.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {dailyNews.map(news => (
+                    <div
+                      key={news.id}
+                      onClick={() => handleOpenNews(news)}
+                      className="flex gap-2 p-2 bg-white rounded-lg border border-gray-100 hover:border-red-300 hover:shadow cursor-pointer transition-all group"
+                    >
+                      {news.thumbnail ? (
+                        <img src={news.thumbnail} alt="" className="w-12 h-12 object-cover rounded shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
+                        <div className="w-12 h-12 bg-red-50 rounded flex items-center justify-center shrink-0">
+                          <Newspaper className="w-4 h-4 text-red-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <span className="px-1 py-0.5 bg-red-50 text-red-600 rounded text-xs shrink-0">{news.sourceName}</span>
+                          {news.pubDate && (
+                            <span className="text-xs text-gray-400">{new Date(news.pubDate).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}</span>
+                          )}
+                        </div>
+                        <p className="text-xs font-medium text-gray-800 line-clamp-2 group-hover:text-red-600 transition-colors">{news.title}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : loadingDailyNews ? (
+                <p className="text-xs text-gray-400">正在拉取今日新闻…</p>
+              ) : (
+                <p className="text-xs text-gray-400">今日新闻暂不可用，可在下方手动加载</p>
+              )}
+            </div>
+          )}
+
+          {/* 今日 Wikipedia */}
+          {supportsWikipedia(corpusLang) && (
+            <div className="mb-5">
+              <div className="flex items-center gap-2 mb-2">
+                <Globe className="w-4 h-4 text-blue-500" />
+                <h4 className="font-semibold text-gray-700 text-sm">今日百科 · {dailyWiki.length} 篇</h4>
+                {loadingDailyWiki && <Loader2 className="w-3 h-3 animate-spin text-blue-400" />}
+              </div>
+              {dailyWiki.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {dailyWiki.map((wiki, idx) => (
+                    <div
+                      key={`daily-wiki-${idx}`}
+                      onClick={() => openExternalArticle(wikiToReading(wiki))}
+                      className="flex gap-2 p-2 bg-white rounded-lg border border-gray-100 hover:border-blue-300 hover:shadow cursor-pointer transition-all group"
+                    >
+                      {wiki.thumbnailUrl ? (
+                        <img src={wiki.thumbnailUrl} alt="" className="w-12 h-12 object-cover rounded shrink-0" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                      ) : (
+                        <div className="w-12 h-12 bg-blue-50 rounded flex items-center justify-center shrink-0">
+                          <Globe className="w-4 h-4 text-blue-400" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 mb-0.5 group-hover:text-blue-600 transition-colors line-clamp-1">{wiki.title}</p>
+                        <p className="text-xs text-gray-500 line-clamp-2">{wiki.extract}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : loadingDailyWiki ? (
+                <p className="text-xs text-gray-400">正在拉取今日百科…</p>
+              ) : (
+                <p className="text-xs text-gray-400">今日百科暂不可用，可在下方手动搜索</p>
+              )}
+            </div>
+          )}
+
+          {/* 今日 Gutenberg */}
+          {supportsGutenberg(corpusLang) && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <BookMarked className="w-4 h-4 text-amber-600" />
+                <h4 className="font-semibold text-gray-700 text-sm">今日经典文学 · {dailyBooks.length} 本</h4>
+                {loadingDailyBooks && <Loader2 className="w-3 h-3 animate-spin text-amber-500" />}
+              </div>
+              {dailyBooks.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {dailyBooks.map(book => (
+                    <div
+                      key={book.id}
+                      onClick={() => handleOpenBook(book)}
+                      className="flex gap-2 p-2 bg-white rounded-lg border border-gray-100 hover:border-amber-300 hover:shadow cursor-pointer transition-all group"
+                    >
+                      {book.coverUrl ? (
+                        <img src={book.coverUrl} alt="" className="w-10 h-14 object-cover rounded shrink-0" />
+                      ) : (
+                        <div className="w-10 h-14 bg-amber-100 rounded flex items-center justify-center shrink-0">
+                          <BookMarked className="w-4 h-4 text-amber-500" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 line-clamp-2 mb-0.5 group-hover:text-amber-700 transition-colors">{book.title}</p>
+                        <p className="text-xs text-gray-500 line-clamp-1">{book.authors.join(', ')}</p>
+                        <p className="text-xs text-gray-400">下载 {book.downloadCount.toLocaleString()} 次</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : loadingDailyBooks ? (
+                <p className="text-xs text-gray-400">正在拉取今日书单…</p>
+              ) : (
+                <p className="text-xs text-gray-400">今日书单暂不可用，可在下方手动加载</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* 手动探索更多 */}
+        <div className="mb-4">
+          <h3 className="text-base font-bold text-gray-700 mb-2 flex items-center gap-2">
+            <Search className="w-4 h-4 text-gray-400" />
+            手动探索更多
+          </h3>
+          <p className="text-xs text-gray-400">今日推荐之外，可按主题关键词即时搜索新闻 / Wikipedia，或加载完整 Gutenberg 书单</p>
         </div>
 
         {/* 主题搜索框 */}
