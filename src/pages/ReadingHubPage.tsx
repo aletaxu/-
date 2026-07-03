@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Clock, ArrowRight, Sparkles, Newspaper, Globe, BookMarked, Loader2, Search } from 'lucide-react';
+import { BookOpen, Clock, ArrowRight, Sparkles, Newspaper, Globe, BookMarked, Loader2, Search, Radio } from 'lucide-react';
 import { readingArticles } from '../data/reading';
 import { languageNames, levelNames } from '../types';
 import type { Language, Level, ReadingCategory } from '../types';
@@ -15,6 +15,14 @@ import {
   type WikipediaArticle,
   type GutenbergBook,
 } from '../services/externalCorpusApi';
+import {
+  fetchNewsByLanguage,
+  searchNewsByKeyword,
+  newsToReadingArticle,
+  getNewsSourcesByLanguage,
+  supportsNews,
+  type NewsItem,
+} from '../services/newsApi';
 
 const languageOptions: { value: 'all' | Language; label: string }[] = [
   { value: 'all', label: '全部语言' },
@@ -83,6 +91,12 @@ export const ReadingHubPage = () => {
   const [wikiError, setWikiError] = useState('');
   const [gutenbergBooks, setGutenbergBooks] = useState<GutenbergBook[]>([]);
   const [loadingBookText, setLoadingBookText] = useState<number | null>(null);
+
+  // ============ 新闻时事状态 ============
+  const [newsItems, setNewsItems] = useState<NewsItem[]>([]);
+  const [loadingNews, setLoadingNews] = useState(false);
+  const [newsError, setNewsError] = useState('');
+  const [newsKeyword, setNewsKeyword] = useState('');
 
   // 在线语料可选语言（英/德/法为主，兼顾其他 Gutenberg 支持的语种）
   const corpusLangOptions: { value: Language; label: string; wiki: boolean; gutenberg: boolean }[] = [
@@ -157,6 +171,49 @@ export const ReadingHubPage = () => {
     } finally {
       setLoadingBookText(null);
     }
+  };
+
+  // ============ 新闻相关函数 ============
+  // 拉取当前语种所有新闻源的最新头条
+  const handleLoadNews = async () => {
+    setLoadingNews(true);
+    setNewsError('');
+    try {
+      const items = await fetchNewsByLanguage(corpusLang, 4);
+      if (items.length === 0) {
+        setNewsError('新闻拉取失败，请稍后重试或换种语言');
+      }
+      setNewsItems(items);
+    } catch {
+      setNewsError('网络异常，请稍后重试');
+    } finally {
+      setLoadingNews(false);
+    }
+  };
+
+  // 按关键词在新闻中筛选
+  const handleSearchNews = async () => {
+    if (!newsKeyword.trim()) {
+      handleLoadNews();
+      return;
+    }
+    setLoadingNews(true);
+    setNewsError('');
+    try {
+      const items = await searchNewsByKeyword(corpusLang, newsKeyword.trim());
+      setNewsItems(items);
+      if (items.length === 0) {
+        setNewsError(`未找到包含"${newsKeyword}"的新闻，试试其他关键词`);
+      }
+    } finally {
+      setLoadingNews(false);
+    }
+  };
+
+  // 点击某条新闻 → 转为阅读文章 → 进入阅读
+  const handleOpenNews = (news: NewsItem) => {
+    const article = newsToReadingArticle(news);
+    openExternalArticle(article);
   };
 
   // 把外部文章塞进路由 state 跳转到阅读页
@@ -304,7 +361,7 @@ export const ReadingHubPage = () => {
             在线语料
           </h2>
           <p className="text-gray-500 text-sm">
-            实时从公开免费语料源拉取：Wikipedia 多语种百科 + Project Gutenberg 7万+公版经典文学。主要支持英语、德语、法语。
+            实时从公开免费语料源拉取：BBC / 经济学人 / 明镜 / 世界报等权威新闻 + Wikipedia 百科 + Project Gutenberg 7万+公版经典文学。主要支持英语、德语、法语。
           </p>
         </div>
 
@@ -316,7 +373,9 @@ export const ReadingHubPage = () => {
               onClick={() => {
                 setCorpusLang(opt.value);
                 setGutenbergBooks([]);
+                setNewsItems([]);
                 setWikiError('');
+                setNewsError('');
               }}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
                 corpusLang === opt.value
@@ -348,6 +407,104 @@ export const ReadingHubPage = () => {
             />
           </div>
         </div>
+
+        {/* ============ 新闻时事区块 ============ */}
+        {supportsNews(corpusLang) && (
+          <div className="card-gradient p-6 mb-6 border-l-4 border-red-400">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+              <div className="flex items-center gap-2">
+                <Radio className="w-5 h-5 text-red-500" />
+                <h3 className="text-lg font-bold text-gray-800">新闻时事</h3>
+                <span className="text-xs text-gray-400">
+                  · {languageNames[corpusLang]} ·{' '}
+                  {getNewsSourcesByLanguage(corpusLang).map(s => s.name).join(' / ')}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={newsKeyword}
+                    onChange={e => setNewsKeyword(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSearchNews(); }}
+                    placeholder="关键词筛选（如 AI / climate / election）"
+                    className="pl-8 pr-3 py-1.5 rounded-lg border border-gray-200 focus:border-red-300 focus:ring-2 focus:ring-red-100 outline-none text-xs w-56"
+                  />
+                </div>
+                <button
+                  onClick={handleSearchNews}
+                  disabled={loadingNews}
+                  className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors disabled:opacity-50"
+                >
+                  筛选
+                </button>
+                <button
+                  onClick={handleLoadNews}
+                  disabled={loadingNews}
+                  className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-xs font-medium hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {loadingNews ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5" />}
+                  {newsItems.length > 0 ? '刷新头条' : '加载头条'}
+                </button>
+              </div>
+            </div>
+
+            {newsError && <p className="text-sm text-red-500 mb-3">{newsError}</p>}
+
+            {newsItems.length > 0 ? (
+              <div className="space-y-2">
+                {newsItems.map(news => (
+                  <div
+                    key={news.id}
+                    onClick={() => handleOpenNews(news)}
+                    className="flex gap-3 p-3 bg-white rounded-lg border border-gray-100 hover:border-red-300 hover:shadow-md cursor-pointer transition-all group"
+                  >
+                    {news.thumbnail ? (
+                      <img
+                        src={news.thumbnail}
+                        alt={news.title}
+                        className="w-16 h-16 object-cover rounded shrink-0"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-red-50 rounded flex items-center justify-center shrink-0">
+                        <Newspaper className="w-5 h-5 text-red-400" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded text-xs font-medium shrink-0">
+                          {news.sourceName}
+                        </span>
+                        <span className={`px-1.5 py-0.5 text-white rounded text-xs shrink-0 ${categoryColors[news.category]}`}>
+                          {categoryLabels[news.category]}
+                        </span>
+                        {news.pubDate && (
+                          <span className="text-xs text-gray-400 shrink-0">
+                            {new Date(news.pubDate).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="font-semibold text-gray-800 text-sm line-clamp-2 mb-1 group-hover:text-red-600 transition-colors">
+                        {news.title}
+                      </h4>
+                      <p className="text-xs text-gray-500 line-clamp-2">{news.description}</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-red-500 group-hover:translate-x-1 transition-all shrink-0 self-center" />
+                  </div>
+                ))}
+                <p className="text-xs text-gray-400 pt-1">
+                  点击任意新闻进入精读：点词查义、影子跟读。新闻内容版权归原媒体所有，仅供个人学习使用。
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">
+                点击「加载头条」拉取 {languageNames[corpusLang]} 最新新闻，支持按关键词筛选时事热点。每条新闻可进入精读模式，自动清洗 HTML 并按句分段。
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Wikipedia 区块 */}
         {supportsWikipedia(corpusLang) && (
