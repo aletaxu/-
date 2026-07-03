@@ -15,7 +15,7 @@ import {
   Quote,
   Sparkles,
 } from 'lucide-react';
-import type { Course, CourseModule, Language } from '../../types';
+import type { Course, CourseModule, Language, ReadingArticle } from '../../types';
 import { languageCodes } from '../../types';
 import { getReadingArticle, getReadingArticleById } from '../../data/reading';
 import { getWordDetail, type WordDetail } from '../../services/languageDataApi';
@@ -27,6 +27,8 @@ interface VocabularyModuleProps {
   course: Course;
   module: CourseModule;
   articleId?: string;
+  // 外部语料（Wikipedia/Gutenberg）动态生成的文章，优先级高于 articleId
+  article?: ReadingArticle;
 }
 
 type Stage = 'reading' | 'collocations' | 'shadowing' | 'result';
@@ -54,14 +56,16 @@ const tokenize = (text: string): Token[] => {
   return tokens;
 };
 
-export const ReadingModule = ({ course, module: courseModule, articleId }: VocabularyModuleProps) => {
+export const ReadingModule = ({ course, module: courseModule, articleId, article: articleProp }: VocabularyModuleProps) => {
   const { saveProgress } = useProgress();
   const { addReward, lastReward } = useRewards();
   const article = useMemo(
-    () => articleId
-      ? (getReadingArticleById(articleId) || getReadingArticle(course.language, course.level))
-      : getReadingArticle(course.language, course.level),
-    [articleId, course.language, course.level]
+    () => articleProp
+      ? articleProp
+      : articleId
+        ? (getReadingArticleById(articleId) || getReadingArticle(course.language, course.level))
+        : getReadingArticle(course.language, course.level),
+    [articleProp, articleId, course.language, course.level]
   );
 
   const [stage, setStage] = useState<Stage>('reading');

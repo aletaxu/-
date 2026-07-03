@@ -1,9 +1,9 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { getCourseById } from '../data/courses';
 import { getReadingArticleById } from '../data/reading';
 import { ReadingModule } from '../components/LearningModules/ReadingModule';
-import type { Course, CourseModule } from '../types';
+import type { Course, CourseModule, ReadingArticle } from '../types';
 
 // 阅读中心进入文章学习时，需要一个虚拟 course + module 作为上下文（用于奖励/进度保存）
 const dummyCourse: Course = {
@@ -31,8 +31,12 @@ const dummyModule: CourseModule = {
 export const ArticleReadPage = () => {
   const { articleId } = useParams<{ articleId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  // 外部语料动态生成的文章通过路由 state 传入
+  const dynamicArticle = (location.state as { article?: ReadingArticle } | null)?.article || undefined;
 
-  const article = articleId ? getReadingArticleById(articleId) : undefined;
+  const article = dynamicArticle
+    || (articleId ? getReadingArticleById(articleId) : undefined);
 
   if (!article) {
     return (
@@ -64,6 +68,7 @@ export const ArticleReadPage = () => {
           course={{ ...matchedCourse, language: article.language, level: article.level }}
           module={{ ...dummyModule, title: article.title, duration: article.estimatedMinutes }}
           articleId={article.id}
+          article={dynamicArticle}
         />
       </div>
     </div>
