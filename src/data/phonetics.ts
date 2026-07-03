@@ -5,7 +5,9 @@
 // 数据来源：Cambridge/Longman 公开词典的 IPA 标注规范
 // 例词均选用高频词，便于用户对照发音
 
-export type PhonemeCategory = 'vowel' | 'consonant' | 'diphthong';
+import type { Language } from '../types';
+
+export type PhonemeCategory = 'vowel' | 'consonant' | 'diphthong' | 'syllable' | 'letter';
 
 export interface PhonemeExample {
   word: string;            // 例词
@@ -20,6 +22,8 @@ export interface Phoneme {
   // 英音/美音对照：相同音位的两种记法（多数一致，少数有差异）
   british?: string;        // 英音 IPA（与 symbol 不同时填）
   american?: string;       // 美音 IPA（与 symbol 不同时填）
+  // 多口音变体（非英语语种如有口音差异时使用），key 为 AccentOption.value
+  accents?: Record<string, string>;
   description: string;     // 发音要领（中文）
   mouthShape: string;      // 口型描述
   commonMistakes: string[]; // 中国学习者常见错误
@@ -1045,3 +1049,102 @@ export const britishAmericanDifferences: {
   { phonemeId: 'p-18', british: '/eə/', american: '/er/', note: '美音卷舌（hair, care）' },
   { phonemeId: 'p-19', british: '/ʊə/', american: '/ʊr/', note: '美音卷舌（tour, pure）' },
 ];
+
+// ============================================================
+// 多语种音标/发音练习架构
+// ============================================================
+
+// 音标分组
+export interface PhonemeGroup {
+  id: string;
+  name: string;
+  description: string;
+}
+
+// 口音选项：决定 TTS / 语音识别的语言代码
+export interface AccentOption {
+  value: string;            // 口音标识，如 'british' | 'american' | 'standard'
+  label: string;            // 显示标签，如 '🇬🇧 英音 (RP)'
+  flag: string;             // 旗帜 emoji
+  ttsLang: string;          // speechSynthesis 语言代码
+  recognitionLang: string;  // SpeechRecognition 语言代码
+}
+
+// 口音差异（多口音语种才用，如英语英/美音）
+export interface AccentDifference {
+  phonemeId: string;
+  variants: Record<string, string>;  // { british: '/ɑː/', american: '/ɑr/' }
+  note: string;
+}
+
+// 单语种的音标/发音数据集
+export interface LanguagePhoneticsData {
+  language: Language;
+  title: string;            // 如 '英语音标' / '日语五十音'
+  subtitle: string;         // 副标题描述
+  type: 'ipa' | 'syllabary' | 'alphabet';  // IPA音标 / 音节表 / 字母表
+  accents: AccentOption[];
+  defaultAccent: string;
+  accentDifferences?: AccentDifference[];
+  groups: PhonemeGroup[];
+  phonemes: Phoneme[];
+  // 按分组 id 获取音标列表
+  getPhonemesByGroup: (groupId: string) => Phoneme[];
+}
+
+// 解析音标在指定口音下的显示符号
+export const getPhonemeDisplay = (phoneme: Phoneme, accent: string): string => {
+  if (accent === 'british' && phoneme.british) return phoneme.british;
+  if (accent === 'american' && phoneme.american) return phoneme.american;
+  if (phoneme.accents && phoneme.accents[accent]) return phoneme.accents[accent];
+  return phoneme.symbol;
+};
+
+// 通用分组筛选（按 phoneme.group === groupId）；英语用上面的 idMap 版本
+const filterByGroupId = (phonemes: Phoneme[], groupId: string): Phoneme[] =>
+  phonemes.filter(p => p.group === groupId);
+
+// ============ 英语数据集（包装现有数据） ============
+export const englishPhoneticsData: LanguagePhoneticsData = {
+  language: 'english',
+  title: '英语音标',
+  subtitle: '43 个英语国际音标 · 区分英音 / 美音 · 录音评测 + 个性化矫正',
+  type: 'ipa',
+  accents: [
+    { value: 'british', label: '🇬🇧 英音 (RP)', flag: '🇬🇧', ttsLang: 'en-GB', recognitionLang: 'en-GB' },
+    { value: 'american', label: '🇺🇸 美音 (GA)', flag: '🇺🇸', ttsLang: 'en-US', recognitionLang: 'en-US' },
+  ],
+  defaultAccent: 'american',
+  accentDifferences: britishAmericanDifferences.map(d => ({
+    phonemeId: d.phonemeId,
+    variants: { british: d.british, american: d.american },
+    note: d.note,
+  })),
+  groups: phonemeGroups,
+  phonemes,
+  getPhonemesByGroup,
+};
+
+// ============ 多语种注册表 ============
+// 其他语种数据由 phoneticsOther*.ts 注册，运行时合并
+const _registry: Partial<Record<Language, LanguagePhoneticsData>> = {
+  english: englishPhoneticsData,
+};
+
+// 供其他数据文件注册自身
+export const registerPhoneticsData = (data: LanguagePhoneticsData) => {
+  _registry[data.language] = data;
+};
+
+// 获取某语种的音标数据（不存在则返回 undefined）
+export const getPhoneticsData = (language: Language): LanguagePhoneticsData | undefined =>
+  _registry[language];
+
+// 当前已注册的语种列表
+export const getAvailablePhoneticsLanguages = (): Language[] =>
+  Object.keys(_registry) as Language[];
+
+// 默认按 group id 筛选的工厂（供非英语数据集使用）
+export const makeGroupFilter = (phonemes: Phoneme[]) =>
+  (groupId: string): Phoneme[] => filterByGroupId(phonemes, groupId);
+

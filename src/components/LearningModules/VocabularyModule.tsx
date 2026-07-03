@@ -9,6 +9,7 @@ import { useRewards } from '../../hooks/useRewards';
 import { RewardToast } from '../RewardToast';
 import { getWordDetail, type WordDetail } from '../../services/languageDataApi';
 import { analyzeWordMorph } from '../../utils/wordMorph';
+import { getAvailablePhoneticsLanguages } from '../../data/phoneticsIndex';
 
 interface VocabularyModuleProps {
   course: Course;
@@ -33,6 +34,8 @@ export const VocabularyModule = ({ course, module }: VocabularyModuleProps) => {
 
   const currentWord = words[currentIndex];
   const currentDetail = detailMap.get(currentWord.word.toLowerCase()) || null;
+  // 当前语种是否有音标/发音练习数据（决定是否显示「读音不准？练习音标」入口）
+  const hasPhonetics = getAvailablePhoneticsLanguages().includes(course.language);
 
   // 翻到背面时按需拉取 API 详情（带缓存，二次打开不重复请求）
   useEffect(() => {
@@ -352,14 +355,14 @@ export const VocabularyModule = ({ course, module }: VocabularyModuleProps) => {
                 </div>
               )}
 
-              {/* 音标练习入口：仅英语单词显示，读音不准时跳转练习并矫正 */}
-              {course.language === 'english' && (
+              {/* 音标练习入口：有音标数据的语种显示，读音不准时跳转练习并矫正 */}
+              {hasPhonetics && (
                 <button
                   onClick={(e) => { e.stopPropagation(); navigate('/phonetics'); }}
                   className="w-full mt-1 shrink-0 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
                 >
                   <Headphones className="w-3.5 h-3.5" />
-                  <span>读音不准？练习音标并矫正</span>
+                  <span>读音不准？练习发音并矫正</span>
                 </button>
               )}
             </div>

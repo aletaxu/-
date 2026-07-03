@@ -1,28 +1,49 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Volume2, Mic, MicOff, ArrowRight, ArrowLeft, CheckCircle2,
-  AlertTriangle, Lightbulb, BookOpen, RefreshCw, Award, Headphones
+  AlertTriangle, Lightbulb, BookOpen, RefreshCw, Award, Headphones, Languages
 } from 'lucide-react';
 import {
-  phonemes, phonemeGroups, getPhonemesByGroup,
-  britishAmericanDifferences, type Phoneme
-} from '../data/phonetics';
+  getPhoneticsData, getAvailablePhoneticsLanguages, getPhonemeDisplay,
+  type LanguagePhoneticsData, type AccentOption, type Phoneme
+} from '../data/phoneticsIndex';
+import { languageNames, languageFlags, type Language } from '../types';
 import { useRewards } from '../hooks/useRewards';
 import { RewardToast } from '../components/RewardToast';
 
-type Accent = 'british' | 'american';
 type Mode = 'overview' | 'practice';
 
 export const PhoneticsPage = () => {
   const { addReward, lastReward } = useRewards();
+  const availableLangs = useMemo(() => getAvailablePhoneticsLanguages(), []);
+  const [language, setLanguage] = useState<Language>(availableLangs[0] || 'english');
+  const data: LanguagePhoneticsData | undefined = getPhoneticsData(language);
+
   const [mode, setMode] = useState<Mode>('overview');
-  const [accent, setAccent] = useState<Accent>('american');
-  const [selectedGroup, setSelectedGroup] = useState<string>('short-vowel');
+  const [accent, setAccent] = useState<string>(data?.defaultAccent || 'standard');
+  const [selectedGroup, setSelectedGroup] = useState<string>(data?.groups[0]?.id || '');
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
 
-  const groupPhonemes = useMemo(() => getPhonemesByGroup(selectedGroup), [selectedGroup]);
+  // 切换语种时重置口音/分组/进度
+  useEffect(() => {
+    if (!data) return;
+    setAccent(data.defaultAccent);
+    setSelectedGroup(data.groups[0]?.id || '');
+    setMode('overview');
+    setCurrentIdx(0);
+    setAnswers({});
+  }, [language]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!data) {
+    return (
+      <div className="text-center py-20 text-gray-500">暂无该语种的音标数据</div>
+    );
+  }
+
+  const groupPhonemes = data.getPhonemesByGroup(selectedGroup);
   const currentPhoneme = groupPhonemes[currentIdx];
+  const currentAccent: AccentOption = data.accents.find(a => a.value === accent) || data.accents[0];
 
   const handleStartPractice = (groupId: string) => {
     setSelectedGroup(groupId);
@@ -36,16 +57,12 @@ export const PhoneticsPage = () => {
   };
 
   const handleNext = () => {
-    if (currentIdx < groupPhonemes.length - 1) {
-      setCurrentIdx(prev => prev + 1);
-    }
+    if (currentIdx < groupPhonemes.length - 1) setCurrentIdx(prev => prev + 1);
   };
-
   const handlePrev = () => {
     if (currentIdx > 0) setCurrentIdx(prev => prev - 1);
   };
 
-  // 全部完成 → 发放奖励
   const allDone = groupPhonemes.length > 0 &&
     groupPhonemes.every(p => answers[p.id] !== undefined);
   useEffect(() => {
@@ -55,12 +72,13 @@ export const PhoneticsPage = () => {
       );
       addReward('speaking', avg, 'phonetics', selectedGroup);
     }
-  }, [allDone, mode]);
+  }, [allDone, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (mode === 'practice' && currentPhoneme) {
     return (
       <PhonemePractice
         phoneme={currentPhoneme}
+        data={data}
         accent={accent}
         onAccentChange={setAccent}
         index={currentIdx}
@@ -80,58 +98,79 @@ export const PhoneticsPage = () => {
       <div>
         <h1 className="text-3xl font-bold text-gray-800 mb-2 flex items-center gap-2">
           <Headphones className="w-8 h-8 text-primary-500" />
-          音标练习
+          {data.title}
         </h1>
-        <p className="text-gray-500">
-          48 个英语国际音标 · 区分英音 / 美音 · 录音评测 + 个性化矫正建议 · 从根本上解决发音不准
-        </p>
+        <p className="text-gray-500">{data.subtitle}</p>
       </div>
 
-      {/* 英美音切换 */}
-      <div className="card-gradient p-4 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">发音口音：</span>
-          <div className="flex bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => setAccent('british')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                accent === 'british' ? 'bg-white text-blue-600 shadow' : 'text-gray-500'
-              }`}
-            >
-              🇬🇧 英音 (RP)
-            </button>
-            <button
-              onClick={() => setAccent('american')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-                accent === 'american' ? 'bg-white text-red-600 shadow' : 'text-gray-500'
-              }`}
-            >
-              🇺🇸 美音 (GA)
-            </button>
-          </div>
+      {/* 语种选择 */}
+      <div className="card-gradient p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Languages className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-medium text-gray-700">选择语种</span>
         </div>
-        <span className="text-xs text-gray-400">
-          {accent === 'british' ? '英音：r 后不卷舌，纯元音' : '美音：r 后卷舌，flap T'}
-        </span>
-      </div>
-
-      {/* 英美音差异提示 */}
-      <div className="card-gradient p-5">
-        <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-          <AlertTriangle className="w-5 h-5 text-amber-500" />
-          英美音核心差异（{accent === 'british' ? '当前英音' : '当前美音'}）
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-          {britishAmericanDifferences.map(diff => (
-            <div key={diff.phonemeId} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-100">
-              <span className="font-mono text-lg font-bold text-gray-800">
-                {accent === 'british' ? diff.british : diff.american}
-              </span>
-              <span className="text-xs text-gray-500 flex-1">{diff.note}</span>
-            </div>
+        <div className="flex flex-wrap gap-2">
+          {availableLangs.map(lang => (
+            <button
+              key={lang}
+              onClick={() => setLanguage(lang)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                language === lang
+                  ? 'bg-gradient-to-r from-primary-500 to-accent-500 text-white shadow'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:border-primary-300'
+              }`}
+            >
+              <span className="mr-1">{languageFlags[lang]}</span>
+              {languageNames[lang]}
+            </button>
           ))}
         </div>
       </div>
+
+      {/* 口音切换（仅多口音语种显示） */}
+      {data.accents.length > 1 && (
+        <div className="card-gradient p-4 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">发音口音：</span>
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              {data.accents.map(a => (
+                <button
+                  key={a.value}
+                  onClick={() => setAccent(a.value)}
+                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    accent === a.value ? 'bg-white text-blue-600 shadow' : 'text-gray-500'
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <span className="text-xs text-gray-400">
+            {accent === 'british' ? '英音：r 后不卷舌，纯元音' : accent === 'american' ? '美音：r 后卷舌，flap T' : '标准发音'}
+          </span>
+        </div>
+      )}
+
+      {/* 口音差异提示（仅有多口音差异的语种显示） */}
+      {data.accentDifferences && data.accentDifferences.length > 0 && (
+        <div className="card-gradient p-5">
+          <h2 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-500" />
+            口音核心差异
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {data.accentDifferences.map(diff => (
+              <div key={diff.phonemeId} className="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-100">
+                <span className="font-mono text-lg font-bold text-gray-800">
+                  {diff.variants[accent] || Object.values(diff.variants)[0]}
+                </span>
+                <span className="text-xs text-gray-500 flex-1">{diff.note}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 按组分类练习 */}
       <div>
@@ -140,8 +179,8 @@ export const PhoneticsPage = () => {
           按组练习
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {phonemeGroups.map(group => {
-            const count = getPhonemesByGroup(group.id).length;
+          {data.groups.map(group => {
+            const count = data.getPhonemesByGroup(group.id).length;
             return (
               <div
                 key={group.id}
@@ -153,7 +192,7 @@ export const PhoneticsPage = () => {
                 </h3>
                 <p className="text-xs text-gray-400 mb-3 font-mono">{group.description}</p>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">{count} 个音标</span>
+                  <span className="text-xs text-gray-500">{count} 个{data.type === 'syllabary' ? '假名' : data.type === 'alphabet' ? '字母' : '音标'}</span>
                   <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-primary-500 group-hover:translate-x-1 transition-all" />
                 </div>
               </div>
@@ -166,11 +205,11 @@ export const PhoneticsPage = () => {
       <div>
         <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
           <Volume2 className="w-5 h-5 text-accent-500" />
-          全部 48 音标速查（点击听发音）
+          全部 {data.phonemes.length} {data.type === 'syllabary' ? '假名' : data.type === 'alphabet' ? '字母' : '音标'}速查（点击听发音）
         </h2>
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-          {phonemes.map(p => (
-            <PhonemeChip key={p.id} phoneme={p} accent={accent} />
+          {data.phonemes.map(p => (
+            <PhonemeChip key={p.id} phoneme={p} accent={accent} accentOption={currentAccent} />
           ))}
         </div>
       </div>
@@ -181,18 +220,18 @@ export const PhoneticsPage = () => {
 };
 
 // ============ 单个音标芯片（速查用） ============
-const PhonemeChip = ({ phoneme, accent }: { phoneme: Phoneme; accent: Accent }) => {
+const PhonemeChip = ({
+  phoneme, accent, accentOption
+}: { phoneme: Phoneme; accent: string; accentOption: AccentOption }) => {
   const speak = (text: string) => {
     if (!('speechSynthesis' in window)) return;
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = accent === 'british' ? 'en-GB' : 'en-US';
+    u.lang = accentOption.ttsLang;
     u.rate = 0.8;
     speechSynthesis.speak(u);
   };
 
-  const display = accent === 'british'
-    ? (phoneme.british || phoneme.symbol)
-    : (phoneme.american || phoneme.symbol);
+  const display = getPhonemeDisplay(phoneme, accent);
 
   return (
     <button
@@ -213,8 +252,9 @@ const PhonemeChip = ({ phoneme, accent }: { phoneme: Phoneme; accent: Accent }) 
 // ============ 单音标练习组件 ============
 interface PracticeProps {
   phoneme: Phoneme;
-  accent: Accent;
-  onAccentChange: (a: Accent) => void;
+  data: LanguagePhoneticsData;
+  accent: string;
+  onAccentChange: (a: string) => void;
   index: number;
   total: number;
   onAnswer: (id: string, score: number) => void;
@@ -225,7 +265,7 @@ interface PracticeProps {
 }
 
 const PhonemePractice = ({
-  phoneme, accent, onAccentChange, index, total,
+  phoneme, data, accent, onAccentChange, index, total,
   onAnswer, onNext, onPrev, onBack, allDone
 }: PracticeProps) => {
   const [isRecording, setIsRecording] = useState(false);
@@ -233,6 +273,8 @@ const PhonemePractice = ({
   const [transcript, setTranscript] = useState('');
   const [targetWord, setTargetWord] = useState(phoneme.examples[0].word);
   const recognitionRef = useRef<any>(null);
+
+  const accentOption: AccentOption = data.accents.find(a => a.value === accent) || data.accents[0];
 
   // 切换音标时重置
   useEffect(() => {
@@ -248,7 +290,7 @@ const PhonemePractice = ({
       recognitionRef.current = new SR();
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = accent === 'british' ? 'en-GB' : 'en-US';
+      recognitionRef.current.lang = accentOption.recognitionLang;
 
       recognitionRef.current.onresult = (event: any) => {
         const text = event.results[0][0].transcript.trim().toLowerCase();
@@ -266,7 +308,7 @@ const PhonemePractice = ({
     return () => {
       try { recognitionRef.current?.stop(); } catch { /* ignore */ }
     };
-  }, [phoneme.id, accent, targetWord]);
+  }, [phoneme.id, accent, targetWord]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const calcSimilarity = (s1: string, s2: string): number => {
     if (!s1 || !s2) return 0;
@@ -316,14 +358,12 @@ const PhonemePractice = ({
   const speak = (text: string) => {
     if (!('speechSynthesis' in window)) return;
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = accent === 'british' ? 'en-GB' : 'en-US';
+    u.lang = accentOption.ttsLang;
     u.rate = 0.75;
     speechSynthesis.speak(u);
   };
 
-  const displaySymbol = accent === 'british'
-    ? (phoneme.british || phoneme.symbol)
-    : (phoneme.american || phoneme.symbol);
+  const displaySymbol = getPhonemeDisplay(phoneme, accent);
 
   const scoreColor = score === null ? '' :
     score >= 80 ? 'text-green-600' :
@@ -342,7 +382,7 @@ const PhonemePractice = ({
           className="flex items-center gap-2 text-gray-600 hover:text-gray-800"
         >
           <ArrowLeft className="w-5 h-5" />
-          <span>返回音标总览</span>
+          <span>返回{data.title}总览</span>
         </button>
         <div className="flex items-center gap-3">
           <span className="text-sm text-gray-500">{index + 1} / {total}</span>
@@ -352,16 +392,19 @@ const PhonemePractice = ({
               style={{ width: `${((index + 1) / total) * 100}%` }}
             />
           </div>
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => onAccentChange('british')}
-              className={`px-2 py-1 rounded text-xs ${accent === 'british' ? 'bg-white text-blue-600 shadow' : 'text-gray-500'}`}
-            >🇬🇧 英</button>
-            <button
-              onClick={() => onAccentChange('american')}
-              className={`px-2 py-1 rounded text-xs ${accent === 'american' ? 'bg-white text-red-600 shadow' : 'text-gray-500'}`}
-            >🇺🇸 美</button>
-          </div>
+          {data.accents.length > 1 && (
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              {data.accents.map(a => (
+                <button
+                  key={a.value}
+                  onClick={() => onAccentChange(a.value)}
+                  className={`px-2 py-1 rounded text-xs ${accent === a.value ? 'bg-white text-blue-600 shadow' : 'text-gray-500'}`}
+                >
+                  {a.flag} {a.value === 'british' ? '英' : a.value === 'american' ? '美' : '标'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -475,7 +518,7 @@ const PhonemePractice = ({
               </div>
             </div>
 
-            {score < 80 && (
+            {score < 80 && phoneme.commonMistakes.length > 0 && (
               <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
                 <h4 className="text-sm font-bold text-amber-700 mb-2 flex items-center gap-1">
                   <AlertTriangle className="w-4 h-4" /> 常见错误
@@ -491,7 +534,7 @@ const PhonemePractice = ({
               </div>
             )}
 
-            {score < 100 && (
+            {score < 100 && phoneme.correctionTips.length > 0 && (
               <div className="p-4 bg-green-50 rounded-lg border border-green-200">
                 <h4 className="text-sm font-bold text-green-700 mb-2 flex items-center gap-1">
                   <Lightbulb className="w-4 h-4" /> 矫正建议
