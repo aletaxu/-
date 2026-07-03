@@ -1,4 +1,4 @@
-import { Home, BookOpen, TrendingUp, Users, User, LogOut, GraduationCap, Brain, Target, Newspaper } from 'lucide-react';
+import { Home, BookOpen, TrendingUp, Users, User, LogOut, GraduationCap, Brain, Target, Newspaper, Headphones } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
@@ -11,6 +11,7 @@ const navItems = [
   { path: '/courses', icon: BookOpen, label: '课程中心' },
   { path: '/assessment', icon: Brain, label: '能力测评' },
   { path: '/reading', icon: Newspaper, label: '阅读中心' },
+  { path: '/phonetics', icon: Headphones, label: '音标练习' },
   { path: '/learning-plan', icon: Target, label: '学习计划' },
   { path: '/progress', icon: TrendingUp, label: '学习进度' },
   { path: '/community', icon: Users, label: '社区交流' },

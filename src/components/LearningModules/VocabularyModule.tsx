@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Volume2, CheckCircle2, XCircle, Loader2, BookA, Quote, SplitSquareHorizontal, Tag, Lightbulb } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Volume2, CheckCircle2, XCircle, Loader2, BookA, Quote, SplitSquareHorizontal, Tag, Lightbulb, Headphones } from 'lucide-react';
 import type { Course, CourseModule, Language } from '../../types';
 import { languageCodes } from '../../types';
 import { getWordsByLanguage } from '../../data/courses';
@@ -17,6 +18,7 @@ interface VocabularyModuleProps {
 export const VocabularyModule = ({ course, module }: VocabularyModuleProps) => {
   const { saveProgress } = useProgress();
   const { addReward, lastReward } = useRewards();
+  const navigate = useNavigate();
   const words = getWordsByLanguage(course.language);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
@@ -348,6 +350,17 @@ export const VocabularyModule = ({ course, module }: VocabularyModuleProps) => {
                     ))}
                   </div>
                 </div>
+              )}
+
+              {/* 音标练习入口：仅英语单词显示，读音不准时跳转练习并矫正 */}
+              {course.language === 'english' && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigate('/phonetics'); }}
+                  className="w-full mt-1 shrink-0 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 border border-purple-200 text-xs font-medium transition-colors"
+                >
+                  <Headphones className="w-3.5 h-3.5" />
+                  <span>读音不准？练习音标并矫正</span>
+                </button>
               )}
             </div>
           </div>

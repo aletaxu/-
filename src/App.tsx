@@ -15,6 +15,7 @@ import { PlanSetupPage } from './pages/PlanSetupPage';
 import { LearningPlanPage } from './pages/LearningPlanPage';
 import { ReadingHubPage } from './pages/ReadingHubPage';
 import { ArticleReadPage } from './pages/ArticleReadPage';
+import { PhoneticsPage } from './pages/PhoneticsPage';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -175,6 +176,16 @@ const AppContent = () => {
           <ProtectedRoute>
             <Layout>
               <LearningPlanPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/phonetics"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <PhoneticsPage />
             </Layout>
           </ProtectedRoute>
         }
