@@ -220,8 +220,10 @@ export const fetchNewsList = async (
       cacheKey,
       async () => {
         const rssUrl = encodeURIComponent(source.rssUrl);
+        // 注意：rss2json 免费版不支持 count 参数（需付费 API key），
+        // 因此不带 count，由前端 slice 截断
         const res = await fetch(
-          `https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}&count=${limit}`
+          `https://api.rss2json.com/v1/api.json?rss_url=${rssUrl}`
         );
         if (!res.ok) return [];
         const data: Rss2JsonResponse = await res.json();

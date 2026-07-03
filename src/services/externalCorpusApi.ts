@@ -15,7 +15,7 @@
 // 2. 全部走缓存——避免重复请求外部资源
 // 3. 多语言映射——前端 Language 联合类型 → 各 API 的语言代码
 
-import { cachedFetch } from '../utils/cache';
+import { cachedFetch, fetchWithTimeout } from '../utils/cache';
 import { getTodayKey, getDailySeed, seededPick } from '../utils/dailySeed';
 import type { Language, ReadingArticle, ReadingCategory } from '../types';
 
@@ -35,6 +35,26 @@ const wikipediaLangCode: Record<Language, string> = {
   thai: 'th',
   finnish: 'fi',
   norwegian: 'no',
+};
+
+/**
+ * 对 Wikipedia 发起带超时的请求，并对 JSON 结果统一解析
+ * 直连失败（超时/网络受限）时尝试 allorigins 代理兜底
+ * @returns 已解析的 JSON，失败抛错由调用方 catch
+ */
+const fetchWikipediaJson = async (langCode: string, apiPath: string): Promise<any> => {
+  const directUrl = `https://${langCode}.wikipedia.org${apiPath}`;
+  try {
+    const res = await fetchWithTimeout(directUrl, { headers: { Accept: 'application/json' } }, 8000);
+    if (res.ok) return await res.json();
+    throw new Error(`direct status ${res.status}`);
+  } catch (e) {
+    // 直连失败 → 用 allorigins 代理兜底（应对部分网络环境 wikipedia.org 不可达）
+    const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(directUrl)}`;
+    const res2 = await fetchWithTimeout(proxied, {}, 12000);
+    if (!res2.ok) throw new Error(`proxy status ${res2.status}`);
+    return await res2.json();
+  }
 };
 
 // Gutendex 语言代码（Project Gutenberg 主要收录西方语言）
@@ -93,12 +113,7 @@ export const fetchRandomWikipediaArticle = async (
     return await cachedFetch<WikipediaArticle | null>(
       cacheKey,
       async () => {
-        const res = await fetch(
-          `https://${langCode}.wikipedia.org/api/rest_v1/page/random/summary`,
-          { headers: { Accept: 'application/json' } }
-        );
-        if (!res.ok) return null;
-        const data = await res.json();
+        const data = await fetchWikipediaJson(langCode, '/api/rest_v1/page/random/summary');
 
         // 过滤过短或非标准条目
         const extract: string = data.extract || '';
@@ -138,12 +153,7 @@ export const fetchWikipediaArticleByTopic = async (
       async () => {
         // 用 Wikipedia REST summary 端点按标题查询
         const title = encodeURIComponent(topic.trim().replace(/\s+/g, '_'));
-        const res = await fetch(
-          `https://${langCode}.wikipedia.org/api/rest_v1/page/summary/${title}`,
-          { headers: { Accept: 'application/json' } }
-        );
-        if (!res.ok) return null;
-        const data = await res.json();
+        const data = await fetchWikipediaJson(langCode, `/api/rest_v1/page/summary/${title}`);
 
         const extract: string = data.extract || '';
         if (extract.length < 100) return null;
@@ -191,13 +201,10 @@ export const searchWikipediaArticles = async (
     return await cachedFetch<WikipediaSearchResult[]>(
       cacheKey,
       async () => {
-        const res = await fetch(
-          `https://${langCode}.wikipedia.org/w/api.php?action=query&list=search` +
+        const apiPath = `/w/api.php?action=query&list=search` +
           `&srsearch=${encodeURIComponent(keyword.trim())}&srlimit=${limit}` +
-          `&format=json&origin=*`
-        );
-        if (!res.ok) return [];
-        const data = await res.json();
+          `&format=json&origin=*`;
+        const data = await fetchWikipediaJson(langCode, apiPath);
         const items: Array<{ title: string; snippet: string }> = data?.query?.search || [];
         if (items.length === 0) return [];
 

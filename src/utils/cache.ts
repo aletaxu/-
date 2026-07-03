@@ -74,3 +74,24 @@ export const cachedFetch = async <T>(
   cache.set(cacheKey, data, ttl);
   return data;
 };
+
+/**
+ * 带超时的 fetch（用 AbortController 实现）
+ * 外部 API（Wikipedia 等）在网络受限时可能长时间无响应，加超时避免卡死
+ * @param url 请求地址
+ * @param options fetch 配置
+ * @param timeoutMs 超时毫秒（默认 8000）
+ */
+export const fetchWithTimeout = async (
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 8000
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
