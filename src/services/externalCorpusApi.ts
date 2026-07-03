@@ -163,6 +163,66 @@ export const fetchWikipediaArticleByTopic = async (
   }
 };
 
+// ============ Wikipedia 模糊搜索（返回多条相关结果） ============
+
+export interface WikipediaSearchResult {
+  title: string;
+  snippet: string;       // 清洗后的预览片段（纯文本）
+  contentUrl: string;    // 条目完整 URL
+}
+
+/**
+ * 按关键词模糊搜索 Wikipedia，返回多条相关条目
+ * 使用 MediaWiki action=query&list=search 端点，支持 CORS（origin=*）
+ * @param language 目标语种
+ * @param keyword 搜索关键词（支持模糊匹配，如 "ai"、"coffee"、"Einstein"）
+ * @param limit 返回条数（默认 8）
+ */
+export const searchWikipediaArticles = async (
+  language: Language,
+  keyword: string,
+  limit = 8
+): Promise<WikipediaSearchResult[]> => {
+  const langCode = wikipediaLangCode[language];
+  if (!langCode || !keyword.trim()) return [];
+
+  const cacheKey = `wiki_search_${langCode}_${keyword.toLowerCase().trim()}`;
+  try {
+    return await cachedFetch<WikipediaSearchResult[]>(
+      cacheKey,
+      async () => {
+        const res = await fetch(
+          `https://${langCode}.wikipedia.org/w/api.php?action=query&list=search` +
+          `&srsearch=${encodeURIComponent(keyword.trim())}&srlimit=${limit}` +
+          `&format=json&origin=*`
+        );
+        if (!res.ok) return [];
+        const data = await res.json();
+        const items: Array<{ title: string; snippet: string }> = data?.query?.search || [];
+        if (items.length === 0) return [];
+
+        return items.map(item => ({
+          title: item.title,
+          // snippet 含 <span class="searchmatch"> 高亮标签，清洗成纯文本
+          snippet: (item.snippet || '')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&#39;/g, "'")
+            .replace(/\s+/g, ' ')
+            .trim(),
+          contentUrl: `https://${langCode}.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/\s+/g, '_'))}`,
+        }));
+      },
+      30 * 60 * 1000 // 30分钟
+    );
+  } catch {
+    return [];
+  }
+};
+
 // ============ Gutendex / Project Gutenberg 语料 ============
 
 export interface GutenbergBook {

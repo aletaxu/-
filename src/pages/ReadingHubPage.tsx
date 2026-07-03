@@ -7,6 +7,7 @@ import type { Language, Level, ReadingCategory } from '../types';
 import {
   fetchRandomWikipediaArticle,
   fetchWikipediaArticleByTopic,
+  searchWikipediaArticles,
   fetchGutenbergBooks,
   fetchDailyWikipediaArticles,
   fetchDailyGutenbergBooks,
@@ -15,6 +16,7 @@ import {
   supportsWikipedia,
   supportsGutenberg,
   type WikipediaArticle,
+  type WikipediaSearchResult,
   type GutenbergBook,
 } from '../services/externalCorpusApi';
 import {
@@ -92,6 +94,8 @@ export const ReadingHubPage = () => {
   const [loadingWiki, setLoadingWiki] = useState(false);
   const [loadingGutenberg, setLoadingGutenberg] = useState(false);
   const [wikiError, setWikiError] = useState('');
+  const [wikiSearchResults, setWikiSearchResults] = useState<WikipediaSearchResult[]>([]);
+  const [loadingWikiResult, setLoadingWikiResult] = useState<string | null>(null);
   const [gutenbergBooks, setGutenbergBooks] = useState<GutenbergBook[]>([]);
   const [loadingBookText, setLoadingBookText] = useState<number | null>(null);
 
@@ -181,22 +185,40 @@ export const ReadingHubPage = () => {
     }
   };
 
-  // 按主题拉取 Wikipedia 条目
+  // 按主题搜索 Wikipedia：模糊搜索返回多条结果，在当前页展示列表
   const handleTopicWiki = async () => {
     if (!corpusTopic.trim()) return;
     setLoadingWiki(true);
     setWikiError('');
+    setWikiSearchResults([]);
     try {
-      const wiki = await fetchWikipediaArticleByTopic(corpusLang, corpusTopic.trim());
-      if (!wiki) {
+      const results = await searchWikipediaArticles(corpusLang, corpusTopic.trim(), 8);
+      setWikiSearchResults(results);
+      if (results.length === 0) {
         setWikiError(`未找到"${corpusTopic}"相关条目，试试其他关键词`);
+      }
+    } catch {
+      setWikiError('网络异常，请稍后重试');
+    } finally {
+      setLoadingWiki(false);
+    }
+  };
+
+  // 点击某条 Wikipedia 搜索结果 → 拉取完整摘要 → 进入精读
+  const handleOpenWikiResult = async (title: string) => {
+    setLoadingWikiResult(title);
+    setWikiError('');
+    try {
+      const wiki = await fetchWikipediaArticleByTopic(corpusLang, title);
+      if (!wiki) {
+        setWikiError(`「${title}」暂无法加载完整内容，请试另一条`);
         return;
       }
       openExternalArticle(wikiToReading(wiki));
     } catch {
       setWikiError('网络异常，请稍后重试');
     } finally {
-      setLoadingWiki(false);
+      setLoadingWikiResult(null);
     }
   };
 
@@ -258,6 +280,8 @@ export const ReadingHubPage = () => {
       if (items.length === 0) {
         setNewsError(`未找到包含"${newsKeyword}"的新闻，试试其他关键词`);
       }
+    } catch {
+      setNewsError('新闻搜索异常，请稍后重试或先点「加载头条」拉取最新新闻');
     } finally {
       setLoadingNews(false);
     }
@@ -728,8 +752,38 @@ export const ReadingHubPage = () => {
               </div>
             </div>
             {wikiError && (
-              <p className="text-sm text-red-500">{wikiError}</p>
+              <p className="text-sm text-red-500 mb-3">{wikiError}</p>
             )}
+
+            {/* Wikipedia 搜索结果列表 */}
+            {wikiSearchResults.length > 0 && (
+              <div className="mb-3">
+                <p className="text-xs text-gray-500 mb-2">
+                  搜索「{corpusTopic}」找到 <span className="font-bold text-blue-600">{wikiSearchResults.length}</span> 条相关条目，点击进入精读：
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {wikiSearchResults.map(result => (
+                    <button
+                      key={result.title}
+                      onClick={() => handleOpenWikiResult(result.title)}
+                      disabled={loadingWikiResult === result.title}
+                      className="flex gap-2 p-2.5 bg-white rounded-lg border border-gray-100 hover:border-blue-300 hover:shadow text-left transition-all group disabled:opacity-50"
+                    >
+                      {loadingWikiResult === result.title ? (
+                        <Loader2 className="w-4 h-4 text-blue-400 animate-spin shrink-0 mt-0.5" />
+                      ) : (
+                        <Globe className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 group-hover:text-blue-600 transition-colors line-clamp-1">{result.title}</p>
+                        <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">{result.snippet}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <p className="text-xs text-gray-400">
               拉取后可直接进入阅读：点击任意单词查义，文末有影子跟读。Wikipedia 内容采用 CC BY-SA 协议。
             </p>
