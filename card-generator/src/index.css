@@ -1,0 +1,204 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family: "Noto Sans SC", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #1a1a1a;
+  background-color: #faf7f2;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* 自定义滚动条 */
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: #e8e3da;
+  border-radius: 3px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: #d97757;
+}
+
+/* 自定义 range 滑块 */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #e8e3da;
+  border-radius: 2px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #d97757;
+  cursor: pointer;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(217, 119, 87, 0.4);
+  transition: transform 0.15s;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #d97757;
+  cursor: pointer;
+  border: 2px solid #fff;
+}
+
+/* 纸张纹理 */
+.paper-grain {
+  background-image: radial-gradient(rgba(26, 26, 26, 0.025) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+/* ============ 粒子特效动画 ============ */
+/* 上升型（气球）：从底部往上飘，左右摆动 */
+@keyframes kayan-particle-rise {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateY(-50vh) translateX(var(--drift)) rotate(var(--rotate));
+  }
+  90% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(-100vh) translateX(0) rotate(calc(var(--rotate) * 2));
+    opacity: 0;
+  }
+}
+
+/* 飘落型（花瓣/雪花/彩纸）：从顶部往下落，左右摇摆 + 旋转 */
+@keyframes kayan-particle-fall {
+  0% {
+    transform: translateY(0) translateX(0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateY(50vh) translateX(var(--drift)) rotate(var(--rotate));
+  }
+  90% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateY(100vh) translateX(0) rotate(calc(var(--rotate) * 2));
+    opacity: 0;
+  }
+}
+
+/* 闪烁型（星光）：原位闪烁缩放 */
+@keyframes kayan-particle-twinkle {
+  0%,
+  100% {
+    transform: scale(0.6) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1) rotate(45deg);
+    opacity: 0.9;
+  }
+}
+
+/* ============ 贺卡翻开入场动画 ============ */
+/* 卡片从对折状态（rotateY 90°）缓缓展开到正面 */
+@keyframes kayan-card-open {
+  0% {
+    transform: perspective(1200px) rotateY(88deg);
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(1200px) rotateY(0deg);
+    opacity: 1;
+  }
+}
+
+.kayan-card-enter {
+  animation: kayan-card-open 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: left center;
+  backface-visibility: hidden;
+}
+
+/* ============ 照片浮动动画（查看模式） ============ */
+@keyframes kayan-photo-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--base-rotate, 0deg));
+  }
+  50% {
+    transform: translateY(-8px) rotate(calc(var(--base-rotate, 0deg) + 2deg));
+  }
+}
+
+.kayan-photo-float {
+  animation: kayan-photo-float 4s ease-in-out infinite;
+}
+
+/* ============ 文字打字机浮现 ============ */
+@keyframes kayan-text-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.kayan-text-typing {
+  display: inline-block;
+  animation: kayan-text-fade-in 0.4s ease-out both;
+}
+
+/* 尊重用户的减少动画偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .kayan-card-enter,
+  .kayan-photo-float,
+  .kayan-text-typing {
+    animation: none !important;
+  }
+  [class*="kayan-particle"] {
+    animation: none !important;
+    display: none !important;
+  }
+}
