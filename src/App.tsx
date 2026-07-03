@@ -13,6 +13,8 @@ import { ProfilePage } from './pages/ProfilePage';
 import { AssessmentPage } from './pages/AssessmentPage';
 import { PlanSetupPage } from './pages/PlanSetupPage';
 import { LearningPlanPage } from './pages/LearningPlanPage';
+import { ReadingHubPage } from './pages/ReadingHubPage';
+import { ArticleReadPage } from './pages/ArticleReadPage';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -133,6 +135,26 @@ const AppContent = () => {
           <ProtectedRoute>
             <Layout>
               <AssessmentPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reading"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <ReadingHubPage />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/reading/:articleId"
+        element={
+          <ProtectedRoute>
+            <Layout>
+              <ArticleReadPage />
             </Layout>
           </ProtectedRoute>
         }

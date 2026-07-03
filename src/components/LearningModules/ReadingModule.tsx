@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import type { Course, CourseModule, Language } from '../../types';
 import { languageCodes } from '../../types';
-import { getReadingArticle } from '../../data/reading';
+import { getReadingArticle, getReadingArticleById } from '../../data/reading';
 import { getWordDetail, type WordDetail } from '../../services/languageDataApi';
 import { useProgress } from '../../hooks/useProgress';
 import { useRewards } from '../../hooks/useRewards';
@@ -26,6 +26,7 @@ import { RewardToast } from '../RewardToast';
 interface VocabularyModuleProps {
   course: Course;
   module: CourseModule;
+  articleId?: string;
 }
 
 type Stage = 'reading' | 'collocations' | 'shadowing' | 'result';
@@ -53,12 +54,14 @@ const tokenize = (text: string): Token[] => {
   return tokens;
 };
 
-export const ReadingModule = ({ course, module: courseModule }: VocabularyModuleProps) => {
+export const ReadingModule = ({ course, module: courseModule, articleId }: VocabularyModuleProps) => {
   const { saveProgress } = useProgress();
   const { addReward, lastReward } = useRewards();
   const article = useMemo(
-    () => getReadingArticle(course.language, course.level),
-    [course.language, course.level]
+    () => articleId
+      ? (getReadingArticleById(articleId) || getReadingArticle(course.language, course.level))
+      : getReadingArticle(course.language, course.level),
+    [articleId, course.language, course.level]
   );
 
   const [stage, setStage] = useState<Stage>('reading');
