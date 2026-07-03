@@ -145,12 +145,26 @@ export interface ReadingQuestion {
   explanation?: string;
 }
 
+// 阅读文章分类
+export type ReadingCategory =
+  | 'daily'      // 日常生活
+  | 'tech'       // 科技
+  | 'business'   // 职场商务
+  | 'entertainment' // 娱乐
+  | 'movie'      // 电影
+  | 'drama'      // 电视剧
+  | 'novel'      // 小说文学
+  | 'social'     // 社交交友
+  | 'psychology' // 心理
+  | 'culture';   // 文化
+
 // 阅读文章
 export interface ReadingArticle {
   id: string;
   title: string;
   language: Language;
   level: Level;
+  category: ReadingCategory;
   // 文章正文：每个段落是字符串数组，前端会按单词拆分渲染为可点击 token
   paragraphs: string[];
   // 固定搭配列表（文末集中展示）
