@@ -23,6 +23,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   const [downloading, setDownloading] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [qrError, setQrError] = useState<string>("");
   const [shareUrl, setShareUrl] = useState<string>("");
   const [replayKey, setReplayKey] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
@@ -71,14 +72,34 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
 
   useEffect(() => {
     if (!showQr || !shareUrl) return;
+    setQrDataUrl("");
+    setQrError("");
+    // QR 码硬容量上限约 2953 字节（version 40 + L 级纠错）。
+    // 超过则直接提示，避免 qrcode 库抛错导致无限转圈。
+    const bytes = new Blob([shareUrl]).size;
+    if (bytes > 2900) {
+      const kb = (bytes / 1024).toFixed(1);
+      setQrError(
+        `链接内容过大（${kb}KB），超出二维码容量上限。建议改用「下载图片」分享，或直接复制链接发送。`,
+      );
+      return;
+    }
     QRCode.toDataURL(shareUrl, {
       width: 240,
       margin: 1,
       color: { dark: "#1A1A1A", light: "#FFFFFF" },
-      errorCorrectionLevel: "M",
+      // 用 L 级纠错可容纳更多数据
+      errorCorrectionLevel: "L",
     })
-      .then(setQrDataUrl)
-      .catch((e) => console.error("QR generate failed", e));
+      .then((url) => setQrDataUrl(url))
+      .catch((e) => {
+        console.error("QR generate failed", e);
+        setQrError(
+          "二维码生成失败：" +
+            (e instanceof Error ? e.message : "未知错误") +
+            "。建议改用「下载图片」分享。",
+        );
+      });
   }, [showQr, shareUrl]);
 
   const handleDownload = async () => {
@@ -115,16 +136,18 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
 
   return (
     <>
-      {/* 隐藏的导出专用画布：固定尺寸，不受弹窗布局影响，html2canvas 截图更稳定 */}
+      {/* 隐藏的导出专用画布：固定尺寸，不受弹窗布局影响，html2canvas 截图更稳定
+          放在屏幕外但用 absolute 而非 fixed，避免某些浏览器下 html2canvas 取不到尺寸 */}
       <div
         aria-hidden
         style={{
-          position: "fixed",
+          position: "absolute",
           left: "-9999px",
           top: 0,
           width: "600px",
           pointerEvents: "none",
           opacity: 1,
+          zIndex: -1,
         }}
       >
         <div ref={exportRef} className="rounded-2xl overflow-hidden bg-paper">
@@ -317,6 +340,12 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
             <div className="bg-white p-2 rounded-xl flex items-center justify-center mb-2">
               {qrDataUrl ? (
                 <img src={qrDataUrl} alt="卡片二维码" className="w-40 h-40" />
+              ) : qrError ? (
+                <div className="w-40 h-40 flex items-center justify-center p-3">
+                  <p className="text-[11px] text-clay text-center leading-relaxed">
+                    ⚠️ {qrError}
+                  </p>
+                </div>
               ) : (
                 <div className="w-40 h-40 flex items-center justify-center">
                   <Loader2 size={22} className="animate-spin text-line" />
@@ -324,7 +353,9 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
               )}
             </div>
             <p className="text-[10px] text-muted text-center mb-2">
-              用手机相机或微信扫一扫，直接打开电子卡片
+              {qrError
+                ? "可改用上方「下载图片」或复制链接分享"
+                : "用手机相机或微信扫一扫，直接打开电子卡片"}
             </p>
             {qrDataUrl && (
               <GhostButton
