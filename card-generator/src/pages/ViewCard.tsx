@@ -4,7 +4,7 @@ import { decodeCardFromUrl } from "../lib/urlCodec";
 import { getThemeMeta } from "../lib/constants";
 import { CardCanvas } from "../components/editor/CardCanvas";
 import { getPlayer, findMusic } from "@/lib/musicSynth";
-import { DEFAULT_EFFECTS } from "@/store/cardStore";
+import { DEFAULT_EFFECTS, normalizeCard } from "@/store/cardStore";
 import { ParticleEffect } from "@/components/editor/ParticleEffect";
 import type { CardState } from "../lib/types";
 import { Play, Pause, Music2, ArrowLeft, Sparkles } from "lucide-react";
@@ -26,7 +26,8 @@ export default function ViewCard() {
       setError(true);
       return;
     }
-    setCard(decoded);
+    // 兜底：补齐缺失的 effects/freeTexts 等字段，兼容旧链接
+    setCard(normalizeCard(decoded));
     document.title = `卡言 · ${decoded.text.title || "电子卡片"}`;
     // 离开页面时停止音乐
     return () => {

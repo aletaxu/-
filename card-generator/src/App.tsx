@@ -1,8 +1,9 @@
 import { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { HashRouter as Router, Routes, Route } from "react-router-dom";
 import Editor from "@/pages/Editor";
 import ViewCard from "@/pages/ViewCard";
 import { useCardStore } from "@/store/cardStore";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function App() {
   // 全局键盘快捷键监听
@@ -70,11 +71,13 @@ export default function App() {
   }, []);
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Editor />} />
-        <Route path="/view/:data" element={<ViewCard />} />
-      </Routes>
-    </Router>
+    <ErrorBoundary>
+      <Router>
+        <Routes>
+          <Route path="/" element={<Editor />} />
+          <Route path="/view/:data" element={<ViewCard />} />
+        </Routes>
+      </Router>
+    </ErrorBoundary>
   );
 }

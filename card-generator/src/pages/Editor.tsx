@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import { TopBar } from "../components/editor/TopBar";
 import { ControlPanel } from "../components/editor/ControlPanel";
 import { CardCanvas } from "../components/editor/CardCanvas";
@@ -7,7 +6,6 @@ import { useCardStore } from "../store/cardStore";
 import { getThemeMeta } from "../lib/constants";
 
 export default function Editor() {
-  const canvasRef = useRef<HTMLDivElement>(null);
   const { present } = useCardStore();
   const themeMeta = getThemeMeta(present.theme);
 
@@ -31,13 +29,13 @@ export default function Editor() {
               </div>
               <span className="text-[11px] text-muted hidden sm:inline">点击照片可编辑 · 空白处取消选中</span>
             </div>
-            <CardCanvas ref={canvasRef} card={present} editable />
+            <CardCanvas card={present} editable />
           </div>
         </main>
 
         {/* 右侧预览栏 */}
         <div className="w-72 shrink-0 hidden xl:block">
-          <PreviewPanel canvasRef={canvasRef} />
+          <PreviewPanel />
         </div>
       </div>
 

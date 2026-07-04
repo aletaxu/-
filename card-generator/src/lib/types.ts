@@ -15,6 +15,7 @@ export type CanvasRatio = "4:3" | "3:4";
 export interface Background {
   source: "custom" | "library";
   url: string;
+  gradient?: string; // 渐变 CSS（如 linear-gradient(...)），url 为空时使用
   overlay: string; // 遮罩色 hex
   overlayOpacity: number; // 0-1
 }

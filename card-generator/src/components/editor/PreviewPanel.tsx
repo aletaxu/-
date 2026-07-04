@@ -1,19 +1,16 @@
-import { useState, useEffect, type RefObject } from "react";
+import { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
 import { useCardStore, DEFAULT_EFFECTS } from "../../store/cardStore";
 import { getThemeMeta } from "../../lib/constants";
 import { CardCanvas } from "./CardCanvas";
 import { ParticleEffect } from "./ParticleEffect";
-import { buildShareUrl } from "../../lib/urlCodec";
+import { buildShareUrl, copyToClipboard } from "../../lib/urlCodec";
 import { exportCardAsImage, makeFileName } from "../../lib/exportImage";
 import { PrimaryButton, GhostButton } from "../ui/Controls";
 import { Download, Link2, Check, Monitor, Smartphone, Music2, Loader2, QrCode, X, RotateCcw } from "lucide-react";
+import type { CardState } from "@/lib/types";
 
-interface PreviewPanelProps {
-  canvasRef: RefObject<HTMLDivElement>;
-}
-
-export function PreviewPanel({ canvasRef }: PreviewPanelProps) {
+export function PreviewPanel() {
   const { present } = useCardStore();
   const [previewRatio, setPreviewRatio] = useState<"4:3" | "3:4">("3:4");
   const [copied, setCopied] = useState(false);
@@ -23,21 +20,30 @@ export function PreviewPanel({ canvasRef }: PreviewPanelProps) {
   const [shareUrl, setShareUrl] = useState<string>("");
   // 动效重播：改变 key 强制 CardCanvas 重新挂载，让一次性动画（翻开/打字机/淡入）重新播放
   const [replayKey, setReplayKey] = useState(0);
+  // 导出中：临时关闭粒子和动画，确保导出图片干净无偏移
+  const [isExporting, setIsExporting] = useState(false);
+  // 导出专用 ref：始终指向预览区的 CardCanvas（editable=false，无 react-rnd 包裹、无选中边框）
+  const exportRef = useRef<HTMLDivElement>(null);
 
   // 动效开关（兜底默认全开）
   const effects = { ...DEFAULT_EFFECTS, ...present.effects };
   // 把 effects 纳入 key：切换动效开关时自动重播
-  const cardKey = `${replayKey}-${JSON.stringify(effects)}`;
+  const cardKey = `${replayKey}-${JSON.stringify(effects)}-${isExporting ? "export" : "live"}`;
 
   const replay = () => setReplayKey((k) => k + 1);
 
-  const handleShare = () => {
-    const url = buildShareUrl(present);
-    setShareUrl(url);
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+  const handleShare = async () => {
+    try {
+      const { url } = await buildShareUrl(present);
+      setShareUrl(url);
+      const ok = await copyToClipboard(url);
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch (e) {
+      console.error("buildShareUrl failed", e);
+    }
   };
 
   // 生成二维码
@@ -54,22 +60,32 @@ export function PreviewPanel({ canvasRef }: PreviewPanelProps) {
   }, [showQr, shareUrl]);
 
   const handleDownload = async () => {
-    const node = canvasRef.current;
+    const node = exportRef.current;
     if (!node) return;
     setDownloading(true);
+    setIsExporting(true);
     try {
+      // 等待 React 重新渲染（isExporting=true → 关闭粒子/动画的 CardCanvas 已挂载）
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
       const meta = getThemeMeta(present.theme);
       await exportCardAsImage(node, makeFileName(meta.label));
     } catch (e) {
       console.error(e);
       alert("导出失败，请重试");
     } finally {
+      setIsExporting(false);
       setDownloading(false);
     }
   };
 
   // 预览用的卡片状态（使用预览比例）
-  const previewCard = { ...present, canvasRatio: previewRatio };
+  const previewCard: CardState = { ...present, canvasRatio: previewRatio };
+  // 导出时强制关闭所有动效，避免粒子遮挡、照片浮动偏移、打字机截断
+  const exportCard: CardState = {
+    ...previewCard,
+    effects: { particles: false, cardOpen: false, photoFloat: false, typewriter: false },
+  };
 
   return (
     <aside className="flex flex-col h-full bg-canvas border-l border-line">
@@ -101,7 +117,8 @@ export function PreviewPanel({ canvasRef }: PreviewPanelProps) {
           </button>
           <button
             onClick={replay}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-muted hover:text-clay hover:bg-clay/8 transition-colors ml-auto"
+            disabled={isExporting}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs text-muted hover:text-clay hover:bg-clay/8 transition-colors ml-auto disabled:opacity-50"
             title="重播动效"
           >
             <RotateCcw size={12} />
@@ -110,9 +127,16 @@ export function PreviewPanel({ canvasRef }: PreviewPanelProps) {
         </div>
 
         <div className="rounded-xl overflow-hidden shadow-card bg-paper p-3">
-          <div className={`relative origin-top mx-auto ${effects.cardOpen ? "kayan-card-enter" : ""}`} style={{ maxWidth: "100%" }}>
-            <CardCanvas key={cardKey} card={previewCard} editable={false} />
-            {effects.particles && <ParticleEffect theme={present.theme} style={effects.particleStyle ?? "auto"} />}
+          <div className={`relative origin-top mx-auto ${effects.cardOpen && !isExporting ? "kayan-card-enter" : ""}`} style={{ maxWidth: "100%" }}>
+            <CardCanvas
+              key={cardKey}
+              ref={exportRef}
+              card={isExporting ? exportCard : previewCard}
+              editable={false}
+            />
+            {effects.particles && !isExporting && (
+              <ParticleEffect theme={present.theme} style={effects.particleStyle ?? "auto"} />
+            )}
           </div>
         </div>
 

@@ -4,11 +4,13 @@ import { THEMES } from "../../lib/constants";
 import type { ThemeType } from "../../lib/types";
 import { IconButton } from "../ui/Controls";
 import { DraftsPanel } from "./DraftsPanel";
-import { Undo2, Redo2, RotateCcw, Save, Sparkles, FileText } from "lucide-react";
+import { ShareDialog } from "./ShareDialog";
+import { Undo2, Redo2, RotateCcw, Save, Sparkles, FileText, Share2 } from "lucide-react";
 
 export function TopBar() {
   const { present, undo, redo, canUndo, canRedo, reset } = useCardStore();
   const [draftsOpen, setDraftsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const handleSave = () => {
     // 已通过 persist 自动保存，这里给个提示
@@ -80,6 +82,16 @@ export function TopBar() {
           <FileText size={16} />
           <span className="hidden sm:inline text-sm font-medium">我的草稿</span>
         </button>
+        {/* 分享/下载入口：所有屏幕尺寸都可见，小屏只显示图标 */}
+        <button
+          onClick={() => setShareOpen(true)}
+          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 h-9 rounded-lg bg-clay text-white hover:bg-clay-deep transition-colors"
+          aria-label="分享 / 下载"
+          title="分享 / 下载"
+        >
+          <Share2 size={16} />
+          <span className="hidden sm:inline text-sm font-medium">分享</span>
+        </button>
         <div className="relative">
           <IconButton onClick={handleSave} aria-label="保存草稿" title="保存草稿">
             <Save size={16} />
@@ -95,6 +107,8 @@ export function TopBar() {
 
       {/* 草稿管理弹层 */}
       <DraftsPanel open={draftsOpen} onClose={() => setDraftsOpen(false)} />
+      {/* 分享/下载弹层 */}
+      <ShareDialog open={shareOpen} onClose={() => setShareOpen(false)} />
     </header>
   );
 }

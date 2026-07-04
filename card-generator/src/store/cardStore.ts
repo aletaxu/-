@@ -35,7 +35,7 @@ export function createDefaultCard(): CardState {
       gradient: "linear-gradient(135deg, #FBC2EB 0%, #A6C1EE 100%)",
       overlay: "#000000",
       overlayOpacity: 0,
-    } as Background,
+    },
     music: null,
     photos: [],
     freeTexts: [],
@@ -54,24 +54,34 @@ export function createDefaultCard(): CardState {
   };
 }
 
-// 兼容旧数据：确保 freeTexts 与 effects 字段存在
-export function normalizeCard(state: CardState): CardState {
-  const patched: CardState = !state.freeTexts ? { ...state, freeTexts: [] } : state;
-  if (!patched.effects) {
-    return { ...patched, effects: { ...DEFAULT_EFFECTS } };
+// 兼容旧数据：补齐所有可能缺失的字段，避免 ViewCard 渲染时崩溃
+export function normalizeCard(state: Partial<CardState> | null | undefined): CardState {
+  if (!state || typeof state !== "object") {
+    return createDefaultCard();
   }
-  // 补齐可能缺失的子字段（向后兼容）
+  const defaults = createDefaultCard();
   return {
-    ...patched,
-    effects: { ...DEFAULT_EFFECTS, ...patched.effects },
+    ...defaults,
+    ...state,
+    // 嵌套对象需要单独合并，避免部分缺失导致崩溃
+    background: { ...defaults.background, ...(state.background ?? {}) },
+    text: { ...defaults.text, ...(state.text ?? {}) },
+    photos: Array.isArray(state.photos) ? state.photos : [],
+    freeTexts: Array.isArray(state.freeTexts) ? state.freeTexts : [],
+    music: state.music ?? null,
+    effects: { ...DEFAULT_EFFECTS, ...(state.effects ?? {}) },
   };
 }
 
 // 为 Background 提供兼容渐变的类型（assets.ts 中 BackgroundAsset 有 gradient 字段，
 // 但 CardState.Background 没有，这里扩展存储时把 gradient 也存进 url 字段以特殊标记）
 // 实际处理：若 url 以 "gradient:" 开头则视为渐变
-export function backgroundToStyle(bg: Background): React.CSSProperties {
-  if (bg.url.startsWith("gradient:")) {
+export function backgroundToStyle(bg: Background | undefined | null): React.CSSProperties {
+  if (!bg) {
+    return { background: "#FAF7F2" };
+  }
+  // 优先用 url（可能含 gradient: 前缀）
+  if (bg.url && bg.url.startsWith("gradient:")) {
     return { background: bg.url.slice("gradient:".length) };
   }
   if (bg.url) {
@@ -80,6 +90,10 @@ export function backgroundToStyle(bg: Background): React.CSSProperties {
       backgroundSize: "cover",
       backgroundPosition: "center",
     };
+  }
+  // url 为空时降级到 gradient 字段
+  if (bg.gradient) {
+    return { background: bg.gradient };
   }
   return { background: "#FAF7F2" };
 }
