@@ -74,22 +74,24 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
     if (!showQr || !shareUrl) return;
     setQrDataUrl("");
     setQrError("");
-    // QR 码硬容量上限约 2953 字节（version 40 + L 级纠错）。
-    // 超过则直接提示，避免 qrcode 库抛错导致无限转圈。
+    // QR 码理论容量约 2953 字节（v40 + L 级），但实际可扫描上限远低：
+    // - URL 越长模块越密，手机相机扫描成功率陡降
+    // - L 级纠错容错差，屏幕反光就扫不出
+    // 经验阈值：M 级纠错 + v25 以内（约 1000 字节）才能稳定扫描
     const bytes = new Blob([shareUrl]).size;
-    if (bytes > 2900) {
+    if (bytes > 1100) {
       const kb = (bytes / 1024).toFixed(1);
       setQrError(
-        `链接内容过大（${kb}KB），超出二维码容量上限。建议改用「下载图片」分享，或直接复制链接发送。`,
+        `链接内容过大（${kb}KB），生成的二维码模块过密、手机难以扫描。建议改用「下载图片」分享，或直接复制链接发送。`,
       );
       return;
     }
     QRCode.toDataURL(shareUrl, {
-      width: 240,
-      margin: 1,
+      width: 320, // 更大尺寸，模块更清晰
+      margin: 4, // 标准静默区，扫描必需
       color: { dark: "#1A1A1A", light: "#FFFFFF" },
-      // 用 L 级纠错可容纳更多数据
-      errorCorrectionLevel: "L",
+      // M 级纠错（15% 容错），比 L 级更易扫描
+      errorCorrectionLevel: "M",
     })
       .then((url) => setQrDataUrl(url))
       .catch((e) => {
@@ -337,17 +339,17 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                 <X size={14} />
               </button>
             </div>
-            <div className="bg-white p-2 rounded-xl flex items-center justify-center mb-2">
+            <div className="bg-white p-3 rounded-xl flex items-center justify-center mb-2">
               {qrDataUrl ? (
-                <img src={qrDataUrl} alt="卡片二维码" className="w-40 h-40" />
+                <img src={qrDataUrl} alt="卡片二维码" className="w-52 h-52" />
               ) : qrError ? (
-                <div className="w-40 h-40 flex items-center justify-center p-3">
+                <div className="w-52 h-52 flex items-center justify-center p-3">
                   <p className="text-[11px] text-clay text-center leading-relaxed">
                     ⚠️ {qrError}
                   </p>
                 </div>
               ) : (
-                <div className="w-40 h-40 flex items-center justify-center">
+                <div className="w-52 h-52 flex items-center justify-center">
                   <Loader2 size={22} className="animate-spin text-line" />
                 </div>
               )}
