@@ -564,6 +564,19 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
 
             {!loadingDetail && activeDetail && (
               <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                {/* 中文释义（首要展示，便于初学者快速理解） */}
+                {activeDetail.chineseTranslation && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                    <div className="flex items-center gap-1 text-amber-600 text-xs mb-1 font-medium">
+                      <Sparkles className="w-3 h-3" />
+                      <span>中文释义</span>
+                    </div>
+                    <p className="text-gray-800 text-base font-medium leading-relaxed">
+                      {activeDetail.chineseTranslation}
+                    </p>
+                  </div>
+                )}
+
                 {/* 词性 + 释义 */}
                 {activeDetail.meanings.length > 0 ? (
                   activeDetail.meanings.slice(0, 3).map((m, i) => (

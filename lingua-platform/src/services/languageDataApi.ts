@@ -15,6 +15,7 @@
 import { lookupWord, type DictionaryEntry } from './dictionaryApi';
 import { searchSentences, type TatoebaSentence } from './tatoebaApi';
 import { getSynonyms, getAntonyms, getRelatedWords, getSuggestions } from './datamuseApi';
+import { translateToChinese } from './translationApi';
 import type { Language } from '../types';
 
 // ============ 统一数据结构 ============
@@ -26,6 +27,9 @@ export interface WordDetail {
   // 音标与发音
   phonetic?: string;          // 如 /ˈæpəl/
   audioUrl?: string;          // 真人发音 URL（部分语言/单词提供）
+
+  // 中文释义（来自 MyMemory 翻译 API，便于初学者快速理解词义）
+  chineseTranslation?: string;
 
   // 释义（按词性分组）
   meanings: Array<{
@@ -52,7 +56,7 @@ export interface WordDetail {
   origin?: string;
 
   // 数据来源标记
-  sources: string[];          // ['dictionary', 'tatoeba', 'datamuse']
+  sources: string[];          // ['dictionary', 'tatoeba', 'datamuse', 'translation']
 }
 
 // ============ 内部工具 ============
@@ -96,10 +100,14 @@ export const getWordDetail = async (
   const base = dictEntry ? mapDictionary(dictEntry) : {};
   if (dictEntry) sources.push('dictionary');
 
-  // 2) 真实例句（多语言）—— 与词典并行
-  const tatoebaSentences = await searchSentences(trimmed, language, 3);
+  // 2) 真实例句 + 中文翻译 并行拉取
+  const [tatoebaSentences, chineseTranslation] = await Promise.all([
+    searchSentences(trimmed, language, 3),
+    translateToChinese(trimmed, language),
+  ]);
   const examples = mapTatoeba(tatoebaSentences);
   if (examples.length > 0) sources.push('tatoeba');
+  if (chineseTranslation) sources.push('translation');
 
   // 3) 同义词/反义词（仅英语有效）
   let synonyms: string[] = [];
@@ -113,7 +121,7 @@ export const getWordDetail = async (
   }
 
   // 全部失败则返回 null
-  if (!dictEntry && examples.length === 0 && synonyms.length === 0) {
+  if (!dictEntry && examples.length === 0 && synonyms.length === 0 && !chineseTranslation) {
     return null;
   }
 
@@ -121,6 +129,7 @@ export const getWordDetail = async (
     word: dictEntry?.word || trimmed,
     language,
     ...base,
+    chineseTranslation: chineseTranslation || undefined,
     meanings: base.meanings || [],
     examples,
     synonyms,
