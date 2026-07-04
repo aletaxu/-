@@ -223,8 +223,15 @@ export const fetchDailyArticles = async (
   if (language !== 'english') return [];
   const all = await fetchAllArticles(20);
   if (all.length === 0) return [];
+  // 过滤掉正文过短/只有一句话的（转换后段落数 < 2 或总字数 < 150 视为无内容）
+  const readable = all.filter(item => {
+    const article = articleToReadingArticle(item);
+    const totalChars = article.paragraphs.join('').length;
+    return article.paragraphs.length >= 2 && totalChars >= 150;
+  });
+  const pool = readable.length >= count ? readable : all; // 兜底：达标的太少就用全部
   const seed = getDailySeed() + language.length * 7;
-  return seededPick(all, seed, count);
+  return seededPick(pool, seed, count);
 };
 
 /**

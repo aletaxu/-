@@ -440,14 +440,17 @@ export const fetchDailyWikipediaArticles = async (
     return await cachedFetch<WikipediaArticle[]>(
       cacheKey,
       async () => {
-        // 并发拉 count + 2 篇，过滤过短/失败的，取前 count 篇
-        const fetchCount = count + 2;
+        // 并发拉 count + 4 篇，过滤过短/只有一句话的，取前 count 篇
+        const fetchCount = count + 4;
         const results = await Promise.all(
           Array.from({ length: fetchCount }, () => fetchRandomWikipediaArticle(language))
         );
-        const valid = results.filter((w): w is WikipediaArticle =>
-          !!w && w.extract.length >= 120
-        );
+        // 过滤：extract 字符数 >= 200 且转换后段落数 >= 2（避免只有一句话）
+        const valid = results.filter((w): w is WikipediaArticle => {
+          if (!w || w.extract.length < 200) return false;
+          const paragraphs = splitIntoParagraphs(w.extract);
+          return paragraphs.length >= 2;
+        });
         // 用日期种子确定性挑选（虽然 random 本身随机，但当天缓存后稳定）
         const seed = getDailySeed() + language.length * 11;
         return seededPick(valid, seed, Math.min(count, valid.length));

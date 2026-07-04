@@ -455,9 +455,16 @@ export const fetchDailyNews = async (
         // 拉取该语种所有源的最新头条（每源多拉一些供挑选）
         const all = await fetchNewsByLanguage(language, 8);
         if (all.length === 0) return [];
+        // 过滤掉正文过短/只有一句话的（转换后段落数 < 2 或总字数 < 120 视为无内容）
+        const readable = all.filter(item => {
+          const article = newsToReadingArticle(item);
+          const totalChars = article.paragraphs.join('').length;
+          return article.paragraphs.length >= 2 && totalChars >= 120;
+        });
+        const pool = readable.length >= count ? readable : all; // 兜底：达标的太少就用全部
         // 用日期种子确定性挑选 count 篇
         const seed = getDailySeed() + language.length * 7;
-        return seededPick(all, seed, Math.min(count, all.length));
+        return seededPick(pool, seed, Math.min(count, pool.length));
       },
       20 * 60 * 60 * 1000 // 20小时，确保第二天前刷新
     );
