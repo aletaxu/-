@@ -18,6 +18,7 @@ import {
   BookmarkCheck,
   Gauge,
   Languages,
+  Repeat,
 } from 'lucide-react';
 import type { Course, CourseModule, Language, ReadingArticle } from '../../types';
 import { languageCodes } from '../../types';
@@ -47,16 +48,39 @@ type Token =
 
 const tokenize = (text: string): Token[] => {
   const tokens: Token[] = [];
-  // 用正则匹配：单词（含撇号）或单个标点或空格
-  const regex = /([A-Za-zÀ-ÿ]+(?:'[A-Za-z]+)?)|([.,;:!?"'()\-—]+)|(\s+)/g;
+  // 匹配规则（按优先级）：
+  // 1) 拉丁字母词（含撇号，如 don't）+ 带变音符号的拉丁字母（À-ÿ）
+  // 2) CJK 中文/日文汉字（\u4E00-\u9FFF）+ 日文假名（\u3040-\u30FF）+ 韩文谚文（uAC00-\uD7AF）
+  // 3) 西里尔字母（俄语，\u0400-\u04FF）
+  // 4) 泰文（\u0E00-\u0E7F）
+  // 5) 标点（中英文）
+  // 6) 空白
+  // CJK/韩文/泰文每个字符视为独立"词"（这些语言无空格分词），便于逐字点击查词
+  const regex = /([A-Za-zÀ-ÿ]+(?:'[A-Za-z]+)?)|([\u4E00-\u9FFF])|([\u3040-\u30FF])|([\uAC00-\uD7AF]+)|([\u0400-\u04FF]+)|([\u0E00-\u0E7F]+)|([.,;:!?"'()\-—。，；：！？""''（）——、]+)|(\s+)/g;
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
     if (match[1]) {
+      // 拉丁字母词
       tokens.push({ kind: 'word', text: match[1], clean: match[1].toLowerCase() });
     } else if (match[2]) {
-      tokens.push({ kind: 'punct', text: match[2] });
+      // 单个中文字符
+      tokens.push({ kind: 'word', text: match[2], clean: match[2] });
     } else if (match[3]) {
-      tokens.push({ kind: 'space', text: match[3] });
+      // 单个日文假名
+      tokens.push({ kind: 'word', text: match[3], clean: match[3] });
+    } else if (match[4]) {
+      // 韩文谚文（有空格分词，按词组）
+      tokens.push({ kind: 'word', text: match[4], clean: match[4] });
+    } else if (match[5]) {
+      // 西里尔字母词
+      tokens.push({ kind: 'word', text: match[5], clean: match[5].toLowerCase() });
+    } else if (match[6]) {
+      // 泰文（无空格分词，按连续字符）
+      tokens.push({ kind: 'word', text: match[6], clean: match[6] });
+    } else if (match[7]) {
+      tokens.push({ kind: 'punct', text: match[7] });
+    } else if (match[8]) {
+      tokens.push({ kind: 'space', text: match[8] });
     }
   }
   return tokens;
@@ -65,6 +89,7 @@ const tokenize = (text: string): Token[] => {
 /** 将段落按句末标点切分为句子（保留标点） */
 const splitIntoSentences = (text: string): string[] => {
   if (!text) return [];
+  // 支持中英文句末标点
   const matches = text.match(/[^.!?。！？]+[.!?。！？]+/g);
   if (!matches) return [text];
   // 合并末尾残留（无句末标点的尾段）
@@ -105,6 +130,28 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
   const [loadingSentences, setLoadingSentences] = useState<Set<string>>(new Set());
   // 生词本快照：记录当前语种已收藏的词（小写），用于文中持续高亮
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
+
+  // 精听循环：'none' 单次 | 'sentence' 单句循环 | 'ab' AB 段复读
+  const [loopMode, setLoopMode] = useState<'none' | 'sentence' | 'ab'>('none');
+  // AB 段起止索引（全局句子下标）
+  const [abStart, setAbStart] = useState<number | null>(null);
+  const [abEnd, setAbEnd] = useState<number | null>(null);
+  // 单句循环剩余次数（用于显示）
+  const [loopRemaining, setLoopRemaining] = useState<number>(0);
+  // 听写模式：'none' 关闭 | 'dictation' 听写中
+  const [dictationMode, setDictationMode] = useState<'none' | 'dictation'>('none');
+  // 听写：当前听写的句子索引 + 用户输入 + 校对结果
+  const [dictationIdx, setDictationIdx] = useState(0);
+  const [dictationInput, setDictationInput] = useState('');
+  const [dictationResult, setDictationResult] = useState<{ correct: boolean; diffs: Array<{ char: string; ok: boolean }> } | null>(null);
+  // 用 ref 跟踪当前播放控制状态，便于 onend 回调里读取最新值
+  const playControlRef = useRef<{
+    loop: 'none' | 'sentence' | 'ab';
+    abStart: number | null;
+    abEnd: number | null;
+    rate: number;
+    isCancelled: boolean;
+  }>({ loop: 'none', abStart: null, abEnd: null, rate: 1.0, isCancelled: false });
 
   // 影子跟读
   const [isPlaying, setIsPlaying] = useState(false);
@@ -178,22 +225,75 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textMode]);
 
-  // 播放单句（TTS，带当前语速），并设置高亮
+  // 同步播放控制 ref（让 onend 回调能读到最新状态）
+  useEffect(() => {
+    playControlRef.current = {
+      loop: loopMode,
+      abStart,
+      abEnd,
+      rate: playRate,
+      isCancelled: false,
+    };
+  }, [loopMode, abStart, abEnd, playRate]);
+
+  // 停止所有播放并重置状态
+  const stopAllPlayback = () => {
+    playControlRef.current.isCancelled = true;
+    speechSynthesis.cancel();
+    setActiveSentenceIdx(null);
+    setLoopRemaining(0);
+  };
+
+  // 播放单句（TTS，带当前语速），并设置高亮；根据 loopMode 决定是否循环
   const playSentence = (flatIdx: number) => {
     const text = sentenceFlatList[flatIdx];
     if (!text) return;
     speechSynthesis.cancel();
+    playControlRef.current.isCancelled = false;
     setActiveSentenceIdx(flatIdx);
-    const u = ttsSpeak(text, playRate);
+    const rate = playControlRef.current.rate;
+    const u = ttsSpeak(text, rate);
     if (u) {
-      u.onend = () => setActiveSentenceIdx(prev => (prev === flatIdx ? null : prev));
+      u.onend = () => {
+        if (playControlRef.current.isCancelled) return;
+        const ctrl = playControlRef.current;
+        // 单句循环模式
+        if (ctrl.loop === 'sentence') {
+          setLoopRemaining(prev => {
+            const next = prev <= 0 ? 0 : prev - 1;
+            if (next === 0) {
+              // 循环结束
+              setActiveSentenceIdx(null);
+              return 0;
+            }
+            // 再播一次
+            setTimeout(() => playSentence(flatIdx), 300);
+            return next;
+          });
+          return;
+        }
+        // AB 段复读模式
+        if (ctrl.loop === 'ab' && ctrl.abStart !== null && ctrl.abEnd !== null) {
+          const nextIdx = flatIdx + 1;
+          if (nextIdx > ctrl.abEnd) {
+            // 回到 A 点
+            setTimeout(() => playSentence(ctrl.abStart!), 300);
+          } else {
+            setTimeout(() => playSentence(nextIdx), 200);
+          }
+          return;
+        }
+        // 单次播放：清空高亮
+        setActiveSentenceIdx(prev => (prev === flatIdx ? null : prev));
+      };
     }
   };
 
-  // 顺序连播：从某句开始依次往下播放
+  // 顺序连播：从某句开始依次往下播放（不受 loopMode 影响，但会读 AB 边界）
   const playFromSentence = (startIdx: number) => {
     if (startIdx >= sentenceFlatList.length) return;
     speechSynthesis.cancel();
+    playControlRef.current.isCancelled = false;
     setActiveSentenceIdx(startIdx);
     const speak = (idx: number) => {
       const text = sentenceFlatList[idx];
@@ -201,9 +301,10 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
         setActiveSentenceIdx(null);
         return;
       }
-      const u = ttsSpeak(text, playRate);
+      const u = ttsSpeak(text, playControlRef.current.rate);
       if (u) {
         u.onend = () => {
+          if (playControlRef.current.isCancelled) return;
           if (idx + 1 < sentenceFlatList.length) {
             setActiveSentenceIdx(idx + 1);
             speak(idx + 1);
@@ -214,6 +315,47 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
       }
     };
     speak(startIdx);
+  };
+
+  // 切换单句循环模式：开启时把当前句设为循环目标
+  const toggleSentenceLoop = () => {
+    if (loopMode === 'sentence') {
+      setLoopMode('none');
+      setLoopRemaining(0);
+      stopAllPlayback();
+    } else {
+      setLoopMode('sentence');
+      setLoopRemaining(3); // 默认循环 3 次
+      const target = activeSentenceIdx ?? 0;
+      playSentence(target);
+    }
+  };
+
+  // 切换 AB 段复读模式
+  const toggleAbLoop = () => {
+    if (loopMode === 'ab') {
+      setLoopMode('none');
+      setAbStart(null);
+      setAbEnd(null);
+      stopAllPlayback();
+    } else {
+      // 默认以当前句为 A 点，下一句为 B 点
+      const a = activeSentenceIdx ?? 0;
+      const b = Math.min(a + 1, sentenceFlatList.length - 1);
+      setAbStart(a);
+      setAbEnd(b);
+      setLoopMode('ab');
+      playSentence(a);
+    }
+  };
+
+  // 设置 A/B 点（在当前句右键或专用按钮）
+  const setAbPoint = (point: 'a' | 'b') => {
+    const cur = activeSentenceIdx;
+    if (cur === null) return;
+    if (point === 'a') setAbStart(cur);
+    else setAbEnd(cur);
+    if (loopMode !== 'ab') setLoopMode('ab');
   };
 
   // 切换语速
@@ -245,6 +387,66 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
       });
       setSavedWords(prev => new Set(prev).add(key));
     }
+  };
+
+  // ============ 听写模式 ============
+  const startDictation = () => {
+    stopAllPlayback();
+    setDictationMode('dictation');
+    setDictationIdx(0);
+    setDictationInput('');
+    setDictationResult(null);
+    // 自动播放第一句
+    setTimeout(() => playSentence(0), 100);
+  };
+
+  const exitDictation = () => {
+    stopAllPlayback();
+    setDictationMode('none');
+    setDictationInput('');
+    setDictationResult(null);
+  };
+
+  // 校对听写：逐字符比对，忽略大小写和首尾空格
+  const checkDictation = () => {
+    const target = sentenceFlatList[dictationIdx] || '';
+    // 去除句末标点后比对（听写通常不要求标点）
+    const cleanTarget = target.replace(/[.!?。！？]+$/, '').trim().toLowerCase();
+    const cleanInput = dictationInput.trim().toLowerCase();
+    if (!cleanInput) return;
+    // 逐字符 diff（最长公共子序列简化版：直接按下标比对，多余/缺失标红）
+    const maxLen = Math.max(cleanTarget.length, cleanInput.length);
+    const diffs: Array<{ char: string; ok: boolean }> = [];
+    let allOk = true;
+    for (let i = 0; i < maxLen; i++) {
+      const t = cleanTarget[i] || '';
+      const u = cleanInput[i] || '';
+      if (t && u && t === u) {
+        diffs.push({ char: u, ok: true });
+      } else {
+        // 输入的字符（若有）标红，缺失的位置用 □ 占位
+        diffs.push({ char: u || '□', ok: false });
+        allOk = false;
+      }
+    }
+    setDictationResult({ correct: allOk && cleanTarget === cleanInput, diffs });
+  };
+
+  // 下一句听写
+  const nextDictation = () => {
+    if (dictationIdx + 1 >= sentenceFlatList.length) {
+      exitDictation();
+      return;
+    }
+    setDictationIdx(prev => prev + 1);
+    setDictationInput('');
+    setDictationResult(null);
+    setTimeout(() => playSentence(dictationIdx + 1), 100);
+  };
+
+  // 重听当前句
+  const replayDictation = () => {
+    playSentence(dictationIdx);
   };
 
   // 点击单词后异步加载详情
@@ -486,7 +688,7 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
             </p>
           </div>
 
-          {/* 阅读工具栏：双语切换 / 变速 / 从头连播 / 停止 */}
+          {/* 阅读工具栏：双语切换 / 变速 / 从头连播 / 单句循环 / AB段 / 听写 */}
           <div className="flex items-center gap-2 flex-wrap p-3 bg-white border border-gray-200 rounded-xl">
             <button
               onClick={() => setTextMode(m => (m === 'original' ? 'bilingual' : 'original'))}
@@ -516,9 +718,45 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
               <Play className="w-3.5 h-3.5" />
               <span>连播</span>
             </button>
+            <button
+              onClick={toggleSentenceLoop}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                loopMode === 'sentence'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="单句精听循环（默认3次）"
+            >
+              <Repeat className="w-3.5 h-3.5" />
+              <span>{loopMode === 'sentence' ? `单句×${loopRemaining}` : '单句循环'}</span>
+            </button>
+            <button
+              onClick={toggleAbLoop}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                loopMode === 'ab'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="AB 段复读"
+            >
+              <Repeat className="w-3.5 h-3.5" />
+              <span>{loopMode === 'ab' ? `AB [${abStart ?? '-'}→${abEnd ?? '-'}]` : 'AB复读'}</span>
+            </button>
+            <button
+              onClick={startDictation}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                dictationMode === 'dictation'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="进入听写模式"
+            >
+              <BookA className="w-3.5 h-3.5" />
+              <span>听写</span>
+            </button>
             {activeSentenceIdx !== null && (
               <button
-                onClick={() => { speechSynthesis.cancel(); setActiveSentenceIdx(null); }}
+                onClick={stopAllPlayback}
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
                 title="停止播放"
               >
@@ -530,6 +768,26 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
               生词本：<span className="text-amber-600 font-medium">{savedWords.size}</span> 词
             </div>
           </div>
+
+          {/* AB 段设置提示（开启 AB 模式时显示） */}
+          {loopMode === 'ab' && (
+            <div className="flex items-center gap-2 p-2 bg-purple-50 rounded-lg text-xs text-purple-700">
+              <span>AB 段复读中 · 当前句可作为 A/B 点：</span>
+              <button
+                onClick={() => setAbPoint('a')}
+                className="px-2 py-0.5 bg-purple-200 text-purple-800 rounded hover:bg-purple-300"
+              >
+                设为 A 点
+              </button>
+              <button
+                onClick={() => setAbPoint('b')}
+                className="px-2 py-0.5 bg-purple-200 text-purple-800 rounded hover:bg-purple-300"
+              >
+                设为 B 点
+              </button>
+              <span className="ml-auto">A={abStart ?? '-'} B={abEnd ?? '-'}</span>
+            </div>
+          )}
 
           <div className="card-gradient p-8">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">{article.title}</h3>
@@ -605,6 +863,106 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
               })}
             </div>
           </div>
+
+          {/* ============ 听写模式浮层 ============ */}
+          {dictationMode === 'dictation' && (
+            <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <BookA className="w-5 h-5 text-blue-500" />
+                    <h3 className="text-lg font-bold text-gray-800">
+                      听写模式 · 第 {dictationIdx + 1} / {sentenceFlatList.length} 句
+                    </h3>
+                  </div>
+                  <button
+                    onClick={exitDictation}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 mb-4">
+                  <button
+                    onClick={replayDictation}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>重听</span>
+                  </button>
+                  {loopMode !== 'sentence' && (
+                    <button
+                      onClick={() => { setLoopMode('sentence'); setLoopRemaining(3); playSentence(dictationIdx); }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"
+                    >
+                      <Repeat className="w-3.5 h-3.5" />
+                      <span>单句循环</span>
+                    </button>
+                  )}
+                </div>
+
+                <textarea
+                  value={dictationInput}
+                  onChange={e => { setDictationInput(e.target.value); setDictationResult(null); }}
+                  placeholder="听到的内容写下来…"
+                  className="w-full h-24 p-3 border border-gray-200 rounded-xl text-gray-800 focus:outline-none focus:border-blue-400 resize-none"
+                  autoFocus
+                />
+
+                {dictationResult && (
+                  <div className="mt-3 p-3 bg-gray-50 rounded-xl">
+                    <p className={`text-sm font-medium mb-2 ${dictationResult.correct ? 'text-green-600' : 'text-red-600'}`}>
+                      {dictationResult.correct ? '✓ 全部正确！' : '✗ 还有错误，红色标注需修正'}
+                    </p>
+                    <p className="text-base leading-relaxed">
+                      {dictationResult.diffs.map((d, i) => (
+                        <span
+                          key={i}
+                          className={d.ok ? 'text-gray-700' : 'text-red-600 bg-red-50 rounded px-0.5'}
+                        >
+                          {d.char}
+                        </span>
+                      ))}
+                    </p>
+                    {!dictationResult.correct && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        原句：{sentenceFlatList[dictationIdx]}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex justify-between mt-4">
+                  <button
+                    onClick={exitDictation}
+                    className="px-4 py-2 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 text-sm"
+                  >
+                    退出
+                  </button>
+                  <div className="flex gap-2">
+                    {!dictationResult ? (
+                      <button
+                        onClick={checkDictation}
+                        disabled={!dictationInput.trim()}
+                        className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-40 text-sm"
+                      >
+                        校对
+                      </button>
+                    ) : (
+                      <button
+                        onClick={nextDictation}
+                        className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 text-sm flex items-center gap-1"
+                      >
+                        {dictationIdx + 1 >= sentenceFlatList.length ? '完成' : '下一句'}
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end">
             <button
