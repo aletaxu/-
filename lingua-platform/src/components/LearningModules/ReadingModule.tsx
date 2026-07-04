@@ -14,11 +14,17 @@ import {
   ArrowLeft,
   Quote,
   Sparkles,
+  Bookmark,
+  BookmarkCheck,
+  Gauge,
+  Languages,
 } from 'lucide-react';
 import type { Course, CourseModule, Language, ReadingArticle } from '../../types';
 import { languageCodes } from '../../types';
 import { getReadingArticle, getReadingArticleById } from '../../data/reading';
 import { getWordDetail, type WordDetail } from '../../services/languageDataApi';
+import { translateToChinese } from '../../services/translationApi';
+import { wordbook } from '../../utils/wordbook';
 import { useProgress } from '../../hooks/useProgress';
 import { useRewards } from '../../hooks/useRewards';
 import { RewardToast } from '../RewardToast';
@@ -56,6 +62,17 @@ const tokenize = (text: string): Token[] => {
   return tokens;
 };
 
+/** 将段落按句末标点切分为句子（保留标点） */
+const splitIntoSentences = (text: string): string[] => {
+  if (!text) return [];
+  const matches = text.match(/[^.!?。！？]+[.!?。！？]+/g);
+  if (!matches) return [text];
+  // 合并末尾残留（无句末标点的尾段）
+  const consumed = matches.join('');
+  const tail = text.slice(consumed.length).trim();
+  return tail ? [...matches, tail] : matches;
+};
+
 export const ReadingModule = ({ course, module: courseModule, articleId, article: articleProp }: VocabularyModuleProps) => {
   const { saveProgress } = useProgress();
   const { addReward, lastReward } = useRewards();
@@ -75,6 +92,20 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
   const [detailMap, setDetailMap] = useState<Map<string, WordDetail | null>>(new Map());
   const [loadingDetail, setLoadingDetail] = useState(false);
 
+  // 阅读增强：双语对照 / 变速播放 / 句子高亮 / 句子翻译 / 生词本
+  // textMode: 'original' 仅原文 | 'bilingual' 双语对照
+  const [textMode, setTextMode] = useState<'original' | 'bilingual'>('original');
+  // playRate: TTS 语速，模仿「每日英语听力」8 档变速
+  const [playRate, setPlayRate] = useState<0.6 | 0.8 | 1.0 | 1.2 | 1.4>(1.0);
+  // 当前正在播放/高亮的句子索引（全局，跨段落连续编号）
+  const [activeSentenceIdx, setActiveSentenceIdx] = useState<number | null>(null);
+  // 句子级翻译缓存：key = 句子文本，value = 中文翻译
+  const [sentenceTranslations, setSentenceTranslations] = useState<Map<string, string>>(new Map());
+  // 正在加载翻译的句子集合
+  const [loadingSentences, setLoadingSentences] = useState<Set<string>>(new Set());
+  // 生词本快照：记录当前语种已收藏的词（小写），用于文中持续高亮
+  const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
+
   // 影子跟读
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -83,6 +114,138 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
   const speechUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   const activeDetail = activeWord ? detailMap.get(activeWord.toLowerCase()) : undefined;
+
+  // 挂载时加载生词本快照（当前语种），用于文中持续高亮已收藏词
+  useEffect(() => {
+    setSavedWords(new Set(wordbook.getByLanguage(course.language).map(w => w.word)));
+  }, [course.language]);
+
+  // 把文章所有段落预切成句子，扁平化成全局句子数组（带段落索引）
+  // 用于：句子级播放、句子高亮、双语对照
+  const sentences = useMemo(() => {
+    const result: { text: string; paraIdx: number; sentIdx: number }[] = [];
+    article.paragraphs.forEach((para, pIdx) => {
+      splitIntoSentences(para).forEach((s, sIdx) => {
+        result.push({ text: s, paraIdx: pIdx, sentIdx: sIdx });
+      });
+    });
+    return result;
+  }, [article]);
+
+  // 每个段落的句子列表（按段落分组，渲染用）
+  const sentencesByPara = useMemo(() => {
+    const map = new Map<number, string[]>();
+    sentences.forEach(s => {
+      const arr = map.get(s.paraIdx) || [];
+      arr.push(s.text);
+      map.set(s.paraIdx, arr);
+    });
+    return map;
+  }, [sentences]);
+
+  // 全局句子索引 → 在 sentences 数组中的下标
+  const sentenceFlatList = useMemo(() => sentences.map(s => s.text), [sentences]);
+
+  // 请求某句的中文翻译（带缓存，避免重复请求）
+  const requestSentenceTranslation = (sentence: string) => {
+    if (!sentence.trim()) return;
+    if (sentenceTranslations.has(sentence)) return;
+    if (loadingSentences.has(sentence)) return;
+    setLoadingSentences(prev => new Set(prev).add(sentence));
+    translateToChinese(sentence, course.language as Language)
+      .then(translated => {
+        if (!translated) return;
+        setSentenceTranslations(prev => {
+          const next = new Map(prev);
+          next.set(sentence, translated);
+          return next;
+        });
+      })
+      .finally(() => {
+        setLoadingSentences(prev => {
+          const next = new Set(prev);
+          next.delete(sentence);
+          return next;
+        });
+      });
+  };
+
+  // 切到双语模式时，自动为当前可见句子预取翻译
+  useEffect(() => {
+    if (textMode !== 'bilingual') return;
+    // 预取前 8 句，避免一次性打爆 API
+    sentenceFlatList.slice(0, 8).forEach(requestSentenceTranslation);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textMode]);
+
+  // 播放单句（TTS，带当前语速），并设置高亮
+  const playSentence = (flatIdx: number) => {
+    const text = sentenceFlatList[flatIdx];
+    if (!text) return;
+    speechSynthesis.cancel();
+    setActiveSentenceIdx(flatIdx);
+    const u = ttsSpeak(text, playRate);
+    if (u) {
+      u.onend = () => setActiveSentenceIdx(prev => (prev === flatIdx ? null : prev));
+    }
+  };
+
+  // 顺序连播：从某句开始依次往下播放
+  const playFromSentence = (startIdx: number) => {
+    if (startIdx >= sentenceFlatList.length) return;
+    speechSynthesis.cancel();
+    setActiveSentenceIdx(startIdx);
+    const speak = (idx: number) => {
+      const text = sentenceFlatList[idx];
+      if (!text) {
+        setActiveSentenceIdx(null);
+        return;
+      }
+      const u = ttsSpeak(text, playRate);
+      if (u) {
+        u.onend = () => {
+          if (idx + 1 < sentenceFlatList.length) {
+            setActiveSentenceIdx(idx + 1);
+            speak(idx + 1);
+          } else {
+            setActiveSentenceIdx(null);
+          }
+        };
+      }
+    };
+    speak(startIdx);
+  };
+
+  // 切换语速
+  const cyclePlayRate = () => {
+    const rates: Array<typeof playRate> = [0.6, 0.8, 1.0, 1.2, 1.4];
+    const cur = rates.indexOf(playRate);
+    setPlayRate(rates[(cur + 1) % rates.length]);
+  };
+
+  // 加入/移出生词本
+  const toggleSavedWord = (word: string) => {
+    const key = word.toLowerCase();
+    const lang = course.language;
+    if (wordbook.has(lang, word)) {
+      wordbook.remove(lang, word);
+      setSavedWords(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    } else {
+      wordbook.add({
+        word: key,
+        display: word,
+        language: lang,
+        translation: activeDetail?.chineseTranslation,
+        phonetic: activeDetail?.phonetic,
+        articleTitle: article.title,
+      });
+      setSavedWords(prev => new Set(prev).add(key));
+    }
+  };
 
   // 点击单词后异步加载详情
   useEffect(() => {
@@ -100,12 +263,23 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
           next.set(key, detail);
           return next;
         });
+        // 单词加入生词本时，用最新拉到的中文释义回填（若已收藏）
+        if (detail?.chineseTranslation && wordbook.has(course.language, activeWord)) {
+          wordbook.add({
+            word: key,
+            display: activeWord,
+            language: course.language,
+            translation: detail.chineseTranslation,
+            phonetic: detail.phonetic,
+            articleTitle: article.title,
+          });
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingDetail(false);
       });
     return () => { cancelled = true; };
-  }, [activeWord, course.language, detailMap]);
+  }, [activeWord, course.language, detailMap, article.title]);
 
   // ============ 单词详情面板 ============
   const speakWord = (word: string, audioUrl?: string) => {
@@ -308,31 +482,121 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
           <div className="flex items-center gap-2 p-4 bg-primary-50 rounded-xl">
             <Sparkles className="w-5 h-5 text-primary-600 flex-shrink-0" />
             <p className="text-primary-700 text-sm">
-              点击文章中任意单词，查看翻译、词性解释和真人发音。阅读完成后进入下一阶段学习固定搭配。
+              点击单词查释义，点击句子听朗读。已收藏生词会高亮提示。
             </p>
+          </div>
+
+          {/* 阅读工具栏：双语切换 / 变速 / 从头连播 / 停止 */}
+          <div className="flex items-center gap-2 flex-wrap p-3 bg-white border border-gray-200 rounded-xl">
+            <button
+              onClick={() => setTextMode(m => (m === 'original' ? 'bilingual' : 'original'))}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                textMode === 'bilingual'
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="切换双语/原文"
+            >
+              <Languages className="w-3.5 h-3.5" />
+              <span>{textMode === 'bilingual' ? '双语对照' : '仅原文'}</span>
+            </button>
+            <button
+              onClick={cyclePlayRate}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+              title="切换语速"
+            >
+              <Gauge className="w-3.5 h-3.5" />
+              <span>{playRate.toFixed(1)}×</span>
+            </button>
+            <button
+              onClick={() => playFromSentence(0)}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+              title="从头连播"
+            >
+              <Play className="w-3.5 h-3.5" />
+              <span>连播</span>
+            </button>
+            {activeSentenceIdx !== null && (
+              <button
+                onClick={() => { speechSynthesis.cancel(); setActiveSentenceIdx(null); }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                title="停止播放"
+              >
+                <Pause className="w-3.5 h-3.5" />
+                <span>停止</span>
+              </button>
+            )}
+            <div className="ml-auto text-xs text-gray-400">
+              生词本：<span className="text-amber-600 font-medium">{savedWords.size}</span> 词
+            </div>
           </div>
 
           <div className="card-gradient p-8">
             <h3 className="text-2xl font-bold text-gray-800 mb-6 text-center">{article.title}</h3>
             <div className="space-y-5 leading-loose text-gray-800 text-lg">
               {article.paragraphs.map((para, pIdx) => {
-                const tokens = tokenize(para);
+                const paraSentences = sentencesByPara.get(pIdx) || [para];
+                // 计算本段首句在全局扁平列表中的起始下标
+                let flatStart = 0;
+                for (let i = 0; i < pIdx; i++) {
+                  flatStart += (sentencesByPara.get(i)?.length || 0);
+                }
                 return (
                   <p key={pIdx}>
-                    {tokens.map((tok, tIdx) => {
-                      if (tok.kind !== 'word') return <span key={tIdx}>{tok.text}</span>;
-                      const isActive = activeWord?.toLowerCase() === tok.clean;
+                    {paraSentences.map((sent, sIdx) => {
+                      const flatIdx = flatStart + sIdx;
+                      const isActiveSent = activeSentenceIdx === flatIdx;
+                      const translation = sentenceTranslations.get(sent);
+                      const isLoadingTrans = loadingSentences.has(sent);
+                      // 句子内部仍按 token 渲染，保留单词点击查词能力
+                      const tokens = tokenize(sent);
                       return (
                         <span
-                          key={tIdx}
-                          onClick={() => setActiveWord(tok.text)}
-                          className={`cursor-pointer transition-colors rounded px-0.5 ${
-                            isActive
-                              ? 'bg-primary-200 text-primary-800'
-                              : 'hover:bg-primary-50 hover:text-primary-600'
-                          }`}
+                          key={sIdx}
+                          className={`rounded transition-colors ${isActiveSent ? 'bg-amber-100' : 'hover:bg-amber-50'}`}
                         >
-                          {tok.text}
+                          {/* 句子朗读按钮（句首小喇叭，hover 显示） */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isActiveSent) {
+                                speechSynthesis.cancel();
+                                setActiveSentenceIdx(null);
+                              } else {
+                                playSentence(flatIdx);
+                              }
+                            }}
+                            className="inline-flex items-center mr-0.5 text-amber-400 hover:text-amber-600 align-middle opacity-60 hover:opacity-100"
+                            title="听本句"
+                          >
+                            <Volume2 className="w-3.5 h-3.5" />
+                          </button>
+                          {tokens.map((tok, tIdx) => {
+                            if (tok.kind !== 'word') return <span key={tIdx}>{tok.text}</span>;
+                            const isActive = activeWord?.toLowerCase() === tok.clean;
+                            const isSaved = savedWords.has(tok.clean);
+                            return (
+                              <span
+                                key={tIdx}
+                                onClick={() => setActiveWord(tok.text)}
+                                className={`cursor-pointer transition-colors rounded px-0.5 ${
+                                  isActive
+                                    ? 'bg-primary-200 text-primary-800'
+                                    : isSaved
+                                    ? 'bg-amber-200 text-amber-800 underline decoration-amber-400'
+                                    : 'hover:bg-primary-50 hover:text-primary-600'
+                                }`}
+                              >
+                                {tok.text}
+                              </span>
+                            );
+                          })}
+                          {/* 双语对照：句末显示中文翻译 */}
+                          {textMode === 'bilingual' && (
+                            <span className="block text-base text-gray-500 mt-1 mb-2 leading-snug">
+                              {isLoadingTrans ? '翻译中…' : (translation || ' ')}
+                            </span>
+                          )}
                         </span>
                       );
                     })}
@@ -545,6 +809,20 @@ export const ReadingModule = ({ course, module: courseModule, articleId, article
                   title="听发音"
                 >
                   <Volume2 className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => toggleSavedWord(activeWord)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    savedWords.has(activeWord.toLowerCase())
+                      ? 'bg-amber-500 text-white hover:bg-amber-600'
+                      : 'bg-amber-50 text-amber-600 hover:bg-amber-100'
+                  }`}
+                  title={savedWords.has(activeWord.toLowerCase()) ? '移出生词本' : '加入生词本'}
+                >
+                  {savedWords.has(activeWord.toLowerCase())
+                    ? <BookmarkCheck className="w-3.5 h-3.5" />
+                    : <Bookmark className="w-3.5 h-3.5" />}
+                  <span>{savedWords.has(activeWord.toLowerCase()) ? '已收藏' : '加生词本'}</span>
                 </button>
               </div>
               <button

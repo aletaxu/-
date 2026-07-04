@@ -43,7 +43,7 @@ interface MyMemoryResponse {
 
 /**
  * 将目标语言的文本翻译为中文
- * @param text 待翻译文本（建议为单词或短语，不超过 500 字符）
+ * @param text 待翻译文本（单词/短语/句子/段落，不超过 1500 字符）
  * @param language 源语言
  * @returns 中文翻译；失败或无结果返回空字符串
  */
@@ -53,7 +53,7 @@ export const translateToChinese = async (
 ): Promise<string> => {
   const trimmed = text?.trim();
   if (!trimmed) return '';
-  if (trimmed.length > 500) return ''; // MyMemory 单次请求有长度限制
+  if (trimmed.length > 1500) return ''; // MyMemory 单次请求有长度限制
 
   const srcCode = translationLangMap[language];
   if (!srcCode) return '';
