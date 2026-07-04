@@ -56,19 +56,19 @@ export const cache = {
   },
 
   /**
-   * 清除每日推荐相关的旧版本缓存（v1 / v2 / 无版本号），用于筛选逻辑变更后强制刷新
-   * 当前每日缓存版本为 v3，凡是不含 _v3_ 的每日缓存键一律清除
+   * 清除每日推荐相关的旧版本缓存（v1 / v2 / v3 / 无版本号），用于筛选逻辑变更后强制刷新
+   * 当前每日缓存版本为 v4，凡是不含 _v4_ 的每日缓存键一律清除
    */
   clearStaleDailyCache(): void {
     Object.keys(localStorage)
       .filter(k => {
         const inner = k.startsWith(CACHE_PREFIX) ? k.slice(CACHE_PREFIX.length) : k;
-        // 旧版每日缓存键（不含 _v3_ 后缀）：daily_news_/daily_wiki_/daily_gutenberg_/daily_articles_ 开头
+        // 旧版每日缓存键（不含 _v4_ 后缀）：daily_news_/daily_wiki_/daily_gutenberg_/daily_articles_ 开头
         const isDaily = inner.startsWith('daily_news_') ||
           inner.startsWith('daily_wiki_') ||
           inner.startsWith('daily_gutenberg_') ||
           inner.startsWith('daily_articles_');
-        return isDaily && !inner.includes('_v3_');
+        return isDaily && !inner.includes('_v4_');
       })
       .forEach(k => localStorage.removeItem(k));
   },

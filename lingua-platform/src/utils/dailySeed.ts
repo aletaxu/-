@@ -52,3 +52,34 @@ export const seededShuffle = <T>(arr: T[], seed: number): T[] => {
 export const seededPick = <T>(arr: T[], seed: number, n: number): T[] => {
   return seededShuffle(arr, seed).slice(0, n);
 };
+
+/**
+ * 将文本截断到最多 maxChars 个字符，尽量在句末断开
+ * 用于控制阅读篇幅上限（如限制 800 字符以内）
+ * - 优先在 maxChars 窗口内的最近句末标点处断开
+ * - 退而求其次在词边界断开
+ * - 实在找不到合适断点则硬切
+ */
+export const truncateToCharCount = (text: string, maxChars: number): string => {
+  if (!text) return '';
+  if (text.length <= maxChars) return text;
+  const slice = text.slice(0, maxChars);
+  // 找最近的句末标点（中英文）
+  const lastSentenceEnd = Math.max(
+    slice.lastIndexOf('. '),
+    slice.lastIndexOf('! '),
+    slice.lastIndexOf('? '),
+    slice.lastIndexOf('。'),
+    slice.lastIndexOf('！'),
+    slice.lastIndexOf('？'),
+  );
+  if (lastSentenceEnd > maxChars * 0.6) {
+    return slice.slice(0, lastSentenceEnd + 1).trim();
+  }
+  // 找不到句末则在词边界断开
+  const lastSpace = slice.lastIndexOf(' ');
+  if (lastSpace > maxChars * 0.8) {
+    return slice.slice(0, lastSpace).trim();
+  }
+  return slice.trim();
+};

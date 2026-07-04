@@ -12,8 +12,12 @@
 // 设计原则与 newsApi 一致：永不抛错、走缓存、HTML/Markdown→纯文本、分段
 
 import { cachedFetch, fetchWithTimeout } from '../utils/cache';
-import { getTodayKey, getDailySeed, seededPick } from '../utils/dailySeed';
+import { getTodayKey, getDailySeed, seededPick, truncateToCharCount } from '../utils/dailySeed';
 import type { Language, ReadingArticle, ReadingCategory } from '../types';
+
+// 阅读篇幅控制：每日推荐文章目标 400-800 字符
+const READING_MIN_CHARS = 400;
+const READING_MAX_CHARS = 800;
 
 // ============ 类型定义 ============
 
@@ -222,18 +226,18 @@ export const fetchDailyArticles = async (
 ): Promise<ArticleItem[]> => {
   if (language !== 'english') return [];
   const todayKey = getTodayKey();
-  const cacheKey = `daily_articles_v3_${language}_${todayKey}`;
+  const cacheKey = `daily_articles_v4_${language}_${todayKey}`;
   try {
     return await cachedFetch<ArticleItem[]>(
       cacheKey,
       async () => {
         const all = await fetchAllArticles(20);
         if (all.length === 0) return [];
-        // 过滤掉正文过短/只有一句话的（转换后段落数 < 2 或总字数 < 150 视为无内容）
+        // 过滤：转换后段落数 >= 2 且总字数 >= 400（篇幅不达标的剔除）
         const readable = all.filter(item => {
           const article = articleToReadingArticle(item);
           const totalChars = article.paragraphs.join('').length;
-          return article.paragraphs.length >= 2 && totalChars >= 150;
+          return article.paragraphs.length >= 2 && totalChars >= READING_MIN_CHARS;
         });
         const pool = readable.length >= count ? readable : all; // 兜底：达标的太少就用全部
         const seed = getDailySeed() + language.length * 7;
@@ -268,9 +272,11 @@ export const searchArticlesByKeyword = async (
  * 将一篇文章转为 ReadingArticle
  */
 export const articleToReadingArticle = (item: ArticleItem): ReadingArticle => {
-  const fullText = item.content && item.content.length > 100
+  const rawText = item.content && item.content.length > 100
     ? item.content
     : item.description;
+  // 控制篇幅上限 800 字符，在句末断开
+  const fullText = truncateToCharCount(rawText, READING_MAX_CHARS);
   const paragraphs = splitIntoParagraphs(fullText, 3);
 
   // 难度判定：按句长

@@ -15,8 +15,12 @@
 // 4. 兜底多源——同一语种配置多个 RSS 源，单个失败自动尝试下一个
 
 import { cachedFetch } from '../utils/cache';
-import { getTodayKey, getDailySeed, seededPick } from '../utils/dailySeed';
+import { getTodayKey, getDailySeed, seededPick, truncateToCharCount } from '../utils/dailySeed';
 import type { Language, ReadingArticle, ReadingCategory } from '../types';
+
+// 阅读篇幅控制：每日推荐文章目标 400-800 字符
+const READING_MIN_CHARS = 400;
+const READING_MAX_CHARS = 800;
 
 // ============ RSS 源配置（按语种分组） ============
 
@@ -396,9 +400,11 @@ export const searchNewsByKeyword = async (
  * 优先用 content（完整正文），其次 description；自动分段
  */
 export const newsToReadingArticle = (news: NewsItem): ReadingArticle => {
-  const fullText = news.content && news.content.length > 100
+  const rawText = news.content && news.content.length > 100
     ? news.content
     : news.description;
+  // 控制篇幅上限 800 字符，在句末断开
+  const fullText = truncateToCharCount(rawText, READING_MAX_CHARS);
   const paragraphs = splitIntoParagraphs(fullText, 3);
 
   // 难度判定：英语新闻按句长，德/法语默认 intermediate
@@ -446,7 +452,7 @@ export const fetchDailyNews = async (
   count = 6
 ): Promise<NewsItem[]> => {
   const todayKey = getTodayKey();
-  const cacheKey = `daily_news_v3_${language}_${todayKey}`;
+  const cacheKey = `daily_news_v4_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<NewsItem[]>(
@@ -455,11 +461,11 @@ export const fetchDailyNews = async (
         // 拉取该语种所有源的最新头条（每源多拉一些供挑选）
         const all = await fetchNewsByLanguage(language, 8);
         if (all.length === 0) return [];
-        // 过滤掉正文过短/只有一句话的（转换后段落数 < 2 或总字数 < 120 视为无内容）
+        // 过滤：转换后段落数 >= 2 且总字数 >= 400（篇幅不达标的剔除）
         const readable = all.filter(item => {
           const article = newsToReadingArticle(item);
           const totalChars = article.paragraphs.join('').length;
-          return article.paragraphs.length >= 2 && totalChars >= 120;
+          return article.paragraphs.length >= 2 && totalChars >= READING_MIN_CHARS;
         });
         const pool = readable.length >= count ? readable : all; // 兜底：达标的太少就用全部
         // 用日期种子确定性挑选 count 篇

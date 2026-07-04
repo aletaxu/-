@@ -16,8 +16,12 @@
 // 3. 多语言映射——前端 Language 联合类型 → 各 API 的语言代码
 
 import { cachedFetch, fetchWithTimeout } from '../utils/cache';
-import { getTodayKey, getDailySeed, seededPick } from '../utils/dailySeed';
+import { getTodayKey, getDailySeed, seededPick, truncateToCharCount } from '../utils/dailySeed';
 import type { Language, ReadingArticle, ReadingCategory } from '../types';
+
+// 阅读篇幅控制：每日推荐文章目标 400-800 字符
+const READING_MIN_CHARS = 400;
+const READING_MAX_CHARS = 800;
 
 // ============ 语言代码映射 ============
 
@@ -361,7 +365,9 @@ export const wikipediaToReadingArticle = (
   wiki: WikipediaArticle,
   category: ReadingCategory = 'culture'
 ): ReadingArticle => {
-  const paragraphs = splitIntoParagraphs(wiki.extract);
+  // 控制篇幅上限 800 字符，在句末断开
+  const extract = truncateToCharCount(wiki.extract, READING_MAX_CHARS);
+  const paragraphs = splitIntoParagraphs(extract);
   // 按平均句长估判难度
   const avgWordsPerSentence =
     wiki.extract.split(/[.!?]+/).filter(s => s.trim()).reduce((sum, s) => sum + s.split(/\s+/).length, 0) /
@@ -391,8 +397,10 @@ export const gutenbergToReadingArticle = async (
   language: Language,
   category: ReadingCategory = 'novel'
 ): Promise<ReadingArticle | null> => {
-  const excerpt = await fetchGutenbergBookExcerpt(book);
-  if (!excerpt) return null;
+  const rawExcerpt = await fetchGutenbergBookExcerpt(book);
+  if (!rawExcerpt) return null;
+  // 控制篇幅上限 800 字符，在句末断开
+  const excerpt = truncateToCharCount(rawExcerpt, READING_MAX_CHARS);
 
   const paragraphs = splitIntoParagraphs(excerpt, 2); // 文学作品段落短一些
 
@@ -434,7 +442,7 @@ export const fetchDailyWikipediaArticles = async (
 ): Promise<WikipediaArticle[]> => {
   if (!supportsWikipedia(language)) return [];
   const todayKey = getTodayKey();
-  const cacheKey = `daily_wiki_v3_${language}_${todayKey}`;
+  const cacheKey = `daily_wiki_v4_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<WikipediaArticle[]>(
@@ -445,15 +453,19 @@ export const fetchDailyWikipediaArticles = async (
         const results = await Promise.all(
           Array.from({ length: fetchCount }, () => fetchRandomWikipediaArticle(language))
         );
-        // 过滤：extract 字符数 >= 200 且转换后段落数 >= 2（避免只有一句话）
+        // 过滤：extract 字符数 >= 400 且转换后段落数 >= 2（避免只有一句话/篇幅过短）
         const valid = results.filter((w): w is WikipediaArticle => {
-          if (!w || w.extract.length < 200) return false;
+          if (!w || w.extract.length < READING_MIN_CHARS) return false;
           const paragraphs = splitIntoParagraphs(w.extract);
           return paragraphs.length >= 2;
         });
+        // 兜底：达标的太少就用所有非空结果，避免每日推荐为空
+        const pool = valid.length >= count
+          ? valid
+          : results.filter((w): w is WikipediaArticle => w !== null);
         // 用日期种子确定性挑选（虽然 random 本身随机，但当天缓存后稳定）
         const seed = getDailySeed() + language.length * 11;
-        return seededPick(valid, seed, Math.min(count, valid.length));
+        return seededPick(pool, seed, Math.min(count, pool.length));
       },
       20 * 60 * 60 * 1000 // 20小时
     );
@@ -473,7 +485,7 @@ export const fetchDailyGutenbergBooks = async (
 ): Promise<GutenbergBook[]> => {
   if (!supportsGutenberg(language)) return [];
   const todayKey = getTodayKey();
-  const cacheKey = `daily_gutenberg_v3_${language}_${todayKey}`;
+  const cacheKey = `daily_gutenberg_v4_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<GutenbergBook[]>(
