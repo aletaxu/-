@@ -452,7 +452,7 @@ export const fetchDailyNews = async (
   count = 6
 ): Promise<NewsItem[]> => {
   const todayKey = getTodayKey();
-  const cacheKey = `daily_news_v4_${language}_${todayKey}`;
+  const cacheKey = `daily_news_v5_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<NewsItem[]>(
@@ -461,16 +461,15 @@ export const fetchDailyNews = async (
         // 拉取该语种所有源的最新头条（每源多拉一些供挑选）
         const all = await fetchNewsByLanguage(language, 8);
         if (all.length === 0) return [];
-        // 过滤：转换后段落数 >= 2 且总字数 >= 400（篇幅不达标的剔除）
+        // 过滤：转换后段落数 >= 2 且总字数 >= 400（篇幅不达标的直接剔除，不兜底）
         const readable = all.filter(item => {
           const article = newsToReadingArticle(item);
           const totalChars = article.paragraphs.join('').length;
           return article.paragraphs.length >= 2 && totalChars >= READING_MIN_CHARS;
         });
-        const pool = readable.length >= count ? readable : all; // 兜底：达标的太少就用全部
-        // 用日期种子确定性挑选 count 篇
+        // 用日期种子确定性挑选 count 篇（不足 count 篇就有多少推荐多少）
         const seed = getDailySeed() + language.length * 7;
-        return seededPick(pool, seed, Math.min(count, pool.length));
+        return seededPick(readable, seed, Math.min(count, readable.length));
       },
       20 * 60 * 60 * 1000 // 20小时，确保第二天前刷新
     );

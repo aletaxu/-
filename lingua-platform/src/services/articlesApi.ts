@@ -226,22 +226,21 @@ export const fetchDailyArticles = async (
 ): Promise<ArticleItem[]> => {
   if (language !== 'english') return [];
   const todayKey = getTodayKey();
-  const cacheKey = `daily_articles_v4_${language}_${todayKey}`;
+  const cacheKey = `daily_articles_v5_${language}_${todayKey}`;
   try {
     return await cachedFetch<ArticleItem[]>(
       cacheKey,
       async () => {
         const all = await fetchAllArticles(20);
         if (all.length === 0) return [];
-        // 过滤：转换后段落数 >= 2 且总字数 >= 400（篇幅不达标的剔除）
+        // 过滤：转换后段落数 >= 2 且总字数 >= 400（篇幅不达标的直接剔除，不兜底）
         const readable = all.filter(item => {
           const article = articleToReadingArticle(item);
           const totalChars = article.paragraphs.join('').length;
           return article.paragraphs.length >= 2 && totalChars >= READING_MIN_CHARS;
         });
-        const pool = readable.length >= count ? readable : all; // 兜底：达标的太少就用全部
         const seed = getDailySeed() + language.length * 7;
-        return seededPick(pool, seed, count);
+        return seededPick(readable, seed, Math.min(count, readable.length));
       },
       20 * 60 * 60 * 1000 // 20小时
     );

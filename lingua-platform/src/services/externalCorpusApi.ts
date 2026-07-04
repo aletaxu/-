@@ -442,7 +442,7 @@ export const fetchDailyWikipediaArticles = async (
 ): Promise<WikipediaArticle[]> => {
   if (!supportsWikipedia(language)) return [];
   const todayKey = getTodayKey();
-  const cacheKey = `daily_wiki_v4_${language}_${todayKey}`;
+  const cacheKey = `daily_wiki_v5_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<WikipediaArticle[]>(
@@ -459,13 +459,9 @@ export const fetchDailyWikipediaArticles = async (
           const paragraphs = splitIntoParagraphs(w.extract);
           return paragraphs.length >= 2;
         });
-        // 兜底：达标的太少就用所有非空结果，避免每日推荐为空
-        const pool = valid.length >= count
-          ? valid
-          : results.filter((w): w is WikipediaArticle => w !== null);
-        // 用日期种子确定性挑选（虽然 random 本身随机，但当天缓存后稳定）
+        // 用日期种子确定性挑选（不兜底，不足 count 篇就有多少推荐多少）
         const seed = getDailySeed() + language.length * 11;
-        return seededPick(pool, seed, Math.min(count, pool.length));
+        return seededPick(valid, seed, Math.min(count, valid.length));
       },
       20 * 60 * 60 * 1000 // 20小时
     );
@@ -485,7 +481,7 @@ export const fetchDailyGutenbergBooks = async (
 ): Promise<GutenbergBook[]> => {
   if (!supportsGutenberg(language)) return [];
   const todayKey = getTodayKey();
-  const cacheKey = `daily_gutenberg_v4_${language}_${todayKey}`;
+  const cacheKey = `daily_gutenberg_v5_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<GutenbergBook[]>(
