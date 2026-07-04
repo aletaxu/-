@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import QRCode from "qrcode";
+import { useState, useRef } from "react";
 import { useCardStore, DEFAULT_EFFECTS } from "../../store/cardStore";
 import { getThemeMeta } from "../../lib/constants";
 import { CardCanvas } from "./CardCanvas";
@@ -7,7 +6,7 @@ import { ParticleEffect } from "./ParticleEffect";
 import { buildShareUrl, copyToClipboard } from "../../lib/urlCodec";
 import { exportCardAsImage, makeFileName } from "../../lib/exportImage";
 import { PrimaryButton, GhostButton } from "../ui/Controls";
-import { Download, Link2, Check, Monitor, Smartphone, Music2, Loader2, QrCode, X, RotateCcw, ExternalLink } from "lucide-react";
+import { Download, Link2, Check, Monitor, Smartphone, Music2, Loader2, X, RotateCcw, ExternalLink } from "lucide-react";
 import type { CardState } from "@/lib/types";
 
 interface ShareDialogProps {
@@ -21,9 +20,6 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   const [previewRatio, setPreviewRatio] = useState<"4:3" | "3:4">("3:4");
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [showQr, setShowQr] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState<string>("");
-  const [qrError, setQrError] = useState<string>("");
   const [shareUrl, setShareUrl] = useState<string>("");
   const [replayKey, setReplayKey] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
@@ -69,40 +65,6 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
       setShareGenerating(false);
     }
   };
-
-  useEffect(() => {
-    if (!showQr || !shareUrl) return;
-    setQrDataUrl("");
-    setQrError("");
-    // QR 码理论容量约 2953 字节（v40 + L 级），但实际可扫描上限远低：
-    // - URL 越长模块越密，手机相机扫描成功率陡降
-    // - L 级纠错容错差，屏幕反光就扫不出
-    // 经验阈值：M 级纠错 + v25 以内（约 1000 字节）才能稳定扫描
-    const bytes = new Blob([shareUrl]).size;
-    if (bytes > 1100) {
-      const kb = (bytes / 1024).toFixed(1);
-      setQrError(
-        `链接内容过大（${kb}KB），生成的二维码模块过密、手机难以扫描。建议改用「下载图片」分享，或直接复制链接发送。`,
-      );
-      return;
-    }
-    QRCode.toDataURL(shareUrl, {
-      width: 320, // 更大尺寸，模块更清晰
-      margin: 4, // 标准静默区，扫描必需
-      color: { dark: "#1A1A1A", light: "#FFFFFF" },
-      // M 级纠错（15% 容错），比 L 级更易扫描
-      errorCorrectionLevel: "M",
-    })
-      .then((url) => setQrDataUrl(url))
-      .catch((e) => {
-        console.error("QR generate failed", e);
-        setQrError(
-          "二维码生成失败：" +
-            (e instanceof Error ? e.message : "未知错误") +
-            "。建议改用「下载图片」分享。",
-        );
-      });
-  }, [showQr, shareUrl]);
 
   const handleDownload = async () => {
     const node = exportRef.current;
@@ -266,19 +228,6 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
                 </>
               )}
             </GhostButton>
-            <GhostButton
-              onClick={async () => {
-                // 必须先确保 shareUrl 已生成，再显示二维码
-                if (!shareUrl) {
-                  await handleShare();
-                }
-                setShowQr(true);
-              }}
-              className="w-full"
-            >
-              <QrCode size={14} />
-              生成二维码
-            </GhostButton>
             {shareUrl && (
               <a
                 href={shareUrl}
@@ -320,59 +269,6 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
         {toast && (
           <div className="border-t border-line px-4 py-2 bg-clay/8 text-center">
             <p className="text-[11px] text-clay">{toast}</p>
-          </div>
-        )}
-
-        {/* 二维码内嵌区 */}
-        {showQr && (
-          <div className="border-t border-line p-4 bg-canvas">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs font-medium text-ink flex items-center gap-1.5">
-                <QrCode size={13} className="text-clay" />
-                扫码查看卡片
-              </h4>
-              <button
-                onClick={() => setShowQr(false)}
-                className="text-muted hover:text-ink transition-colors"
-                aria-label="关闭二维码"
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <div className="bg-white p-3 rounded-xl flex items-center justify-center mb-2">
-              {qrDataUrl ? (
-                <img src={qrDataUrl} alt="卡片二维码" className="w-52 h-52" />
-              ) : qrError ? (
-                <div className="w-52 h-52 flex items-center justify-center p-3">
-                  <p className="text-[11px] text-clay text-center leading-relaxed">
-                    ⚠️ {qrError}
-                  </p>
-                </div>
-              ) : (
-                <div className="w-52 h-52 flex items-center justify-center">
-                  <Loader2 size={22} className="animate-spin text-line" />
-                </div>
-              )}
-            </div>
-            <p className="text-[10px] text-muted text-center mb-2">
-              {qrError
-                ? "可改用上方「下载图片」或复制链接分享"
-                : "用手机相机或微信扫一扫，直接打开电子卡片"}
-            </p>
-            {qrDataUrl && (
-              <GhostButton
-                onClick={() => {
-                  const a = document.createElement("a");
-                  a.href = qrDataUrl;
-                  a.download = `kayan-qr-${Date.now()}.png`;
-                  a.click();
-                }}
-                className="w-full text-xs"
-              >
-                <Download size={12} />
-                保存二维码图片
-              </GhostButton>
-            )}
           </div>
         )}
       </div>

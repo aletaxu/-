@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from "react";
-import QRCode from "qrcode";
+import { useState, useRef } from "react";
 import { useCardStore, DEFAULT_EFFECTS } from "../../store/cardStore";
 import { getThemeMeta } from "../../lib/constants";
 import { CardCanvas } from "./CardCanvas";
@@ -7,7 +6,7 @@ import { ParticleEffect } from "./ParticleEffect";
 import { buildShareUrl, copyToClipboard } from "../../lib/urlCodec";
 import { exportCardAsImage, makeFileName } from "../../lib/exportImage";
 import { PrimaryButton, GhostButton } from "../ui/Controls";
-import { Download, Link2, Check, Monitor, Smartphone, Music2, Loader2, QrCode, X, RotateCcw } from "lucide-react";
+import { Download, Link2, Check, Monitor, Smartphone, Music2, Loader2, RotateCcw } from "lucide-react";
 import type { CardState } from "@/lib/types";
 
 export function PreviewPanel() {
@@ -15,8 +14,6 @@ export function PreviewPanel() {
   const [previewRatio, setPreviewRatio] = useState<"4:3" | "3:4">("3:4");
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [showQr, setShowQr] = useState(false);
-  const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [shareUrl, setShareUrl] = useState<string>("");
   // 动效重播：改变 key 强制 CardCanvas 重新挂载，让一次性动画（翻开/打字机/淡入）重新播放
   const [replayKey, setReplayKey] = useState(0);
@@ -45,19 +42,6 @@ export function PreviewPanel() {
       console.error("buildShareUrl failed", e);
     }
   };
-
-  // 生成二维码
-  useEffect(() => {
-    if (!showQr || !shareUrl) return;
-    QRCode.toDataURL(shareUrl, {
-      width: 240,
-      margin: 1,
-      color: { dark: "#1A1A1A", light: "#FFFFFF" },
-      errorCorrectionLevel: "M",
-    })
-      .then(setQrDataUrl)
-      .catch((e) => console.error("QR generate failed", e));
-  }, [showQr, shareUrl]);
 
   const handleDownload = async () => {
     const node = exportRef.current;
@@ -179,73 +163,10 @@ export function PreviewPanel() {
             </>
           )}
         </GhostButton>
-        <GhostButton
-          onClick={() => {
-            if (!shareUrl) handleShare();
-            setShowQr(true);
-          }}
-          className="w-full"
-        >
-          <QrCode size={14} />
-          生成二维码
-        </GhostButton>
         <p className="text-[10px] text-muted text-center leading-relaxed pt-1">
           分享链接包含完整卡片状态，接收方打开即见，无需注册
         </p>
       </div>
-
-      {/* 二维码弹层 */}
-      {showQr && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6"
-          onClick={() => setShowQr(false)}
-        >
-          <div
-            className="bg-paper rounded-2xl p-5 shadow-card max-w-xs w-full"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-ink flex items-center gap-1.5">
-                <QrCode size={15} className="text-clay" />
-                扫码查看卡片
-              </h3>
-              <button
-                onClick={() => setShowQr(false)}
-                className="text-muted hover:text-ink transition-colors"
-                aria-label="关闭"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="bg-white p-3 rounded-xl flex items-center justify-center mb-3">
-              {qrDataUrl ? (
-                <img src={qrDataUrl} alt="卡片二维码" className="w-48 h-48" />
-              ) : (
-                <div className="w-48 h-48 flex items-center justify-center">
-                  <Loader2 size={24} className="animate-spin text-line" />
-                </div>
-              )}
-            </div>
-            <p className="text-[11px] text-muted text-center leading-relaxed mb-3">
-              用手机相机或微信扫一扫，直接打开电子卡片
-            </p>
-            {qrDataUrl && (
-              <GhostButton
-                onClick={() => {
-                  const a = document.createElement("a");
-                  a.href = qrDataUrl;
-                  a.download = `kayan-qr-${Date.now()}.png`;
-                  a.click();
-                }}
-                className="w-full text-xs"
-              >
-                <Download size={12} />
-                保存二维码图片
-              </GhostButton>
-            )}
-          </div>
-        </div>
-      )}
     </aside>
   );
 }
