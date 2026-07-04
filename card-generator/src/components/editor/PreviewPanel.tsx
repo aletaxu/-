@@ -19,7 +19,8 @@ export function PreviewPanel() {
   const [replayKey, setReplayKey] = useState(0);
   // 导出中：临时关闭粒子和动画，确保导出图片干净无偏移
   const [isExporting, setIsExporting] = useState(false);
-  // 导出专用 ref：始终指向预览区的 CardCanvas（editable=false，无 react-rnd 包裹、无选中边框）
+  const [toast, setToast] = useState<string>("");
+  // 导出专用 ref：指向隐藏的固定 600px 宽画布（与 ShareDialog 一致，html2canvas 截图稳定）
   const exportRef = useRef<HTMLDivElement>(null);
 
   // 动效开关（兜底默认全开）
@@ -28,6 +29,12 @@ export function PreviewPanel() {
   const cardKey = `${replayKey}-${JSON.stringify(effects)}-${isExporting ? "export" : "live"}`;
 
   const replay = () => setReplayKey((k) => k + 1);
+
+  // 显示轻提示，3 秒后消失
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3000);
+  };
 
   const handleShare = async () => {
     try {
@@ -45,18 +52,22 @@ export function PreviewPanel() {
 
   const handleDownload = async () => {
     const node = exportRef.current;
-    if (!node) return;
+    if (!node) {
+      showToast("画布未就绪，请稍后再试");
+      return;
+    }
     setDownloading(true);
     setIsExporting(true);
     try {
-      // 等待 React 重新渲染（isExporting=true → 关闭粒子/动画的 CardCanvas 已挂载）
+      // 等两帧让 DOM 完成重渲染（isExporting=true → 关闭粒子/动画的 CardCanvas 已挂载）
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       const meta = getThemeMeta(present.theme);
       await exportCardAsImage(node, makeFileName(meta.label));
+      showToast("图片已开始下载，请检查浏览器下载列表");
     } catch (e) {
-      console.error(e);
-      alert("导出失败，请重试");
+      console.error("导出失败:", e);
+      showToast("导出失败：" + (e instanceof Error ? e.message : "未知错误"));
     } finally {
       setIsExporting(false);
       setDownloading(false);
@@ -73,6 +84,25 @@ export function PreviewPanel() {
 
   return (
     <aside className="flex flex-col h-full bg-canvas border-l border-line">
+      {/* 隐藏的导出专用画布：与 ShareDialog 一致的稳健方案
+          固定 600px 宽、absolute 定位放屏幕外，html2canvas 截图稳定 */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          left: "-9999px",
+          top: 0,
+          width: "600px",
+          pointerEvents: "none",
+          opacity: 1,
+          zIndex: -1,
+        }}
+      >
+        <div ref={exportRef} className="rounded-2xl overflow-hidden bg-paper">
+          <CardCanvas card={exportCard} editable={false} />
+        </div>
+      </div>
+
       <div className="px-4 py-3 border-b border-line">
         <h2 className="text-sm font-semibold text-ink">实时预览</h2>
         <p className="text-[11px] text-muted">同步显示卡片最终效果</p>
@@ -114,7 +144,6 @@ export function PreviewPanel() {
           <div className={`relative origin-top mx-auto ${effects.cardOpen && !isExporting ? "kayan-card-enter" : ""}`} style={{ maxWidth: "100%" }}>
             <CardCanvas
               key={cardKey}
-              ref={exportRef}
               card={isExporting ? exportCard : previewCard}
               editable={false}
             />
@@ -166,6 +195,10 @@ export function PreviewPanel() {
         <p className="text-[10px] text-muted text-center leading-relaxed pt-1">
           分享链接包含完整卡片状态，接收方打开即见，无需注册
         </p>
+        {/* toast 提示 */}
+        {toast && (
+          <p className="text-[11px] text-clay text-center leading-relaxed pt-1">{toast}</p>
+        )}
       </div>
     </aside>
   );
