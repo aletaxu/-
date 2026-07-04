@@ -28,6 +28,14 @@ import {
   supportsNews,
   type NewsItem,
 } from '../services/newsApi';
+import {
+  fetchAllArticles,
+  fetchDailyArticles,
+  searchArticlesByKeyword,
+  articleToReadingArticle,
+  supportsArticles,
+  type ArticleItem,
+} from '../services/articlesApi';
 
 const languageOptions: { value: 'all' | Language; label: string }[] = [
   { value: 'all', label: '全部语言' },
@@ -105,13 +113,21 @@ export const ReadingHubPage = () => {
   const [newsError, setNewsError] = useState('');
   const [newsKeyword, setNewsKeyword] = useState('');
 
+  // ============ 科技/长文状态（Hacker News + Dev.to） ============
+  const [articleItems, setArticleItems] = useState<ArticleItem[]>([]);
+  const [loadingArticles, setLoadingArticles] = useState(false);
+  const [articlesError, setArticlesError] = useState('');
+  const [articlesKeyword, setArticlesKeyword] = useState('');
+
   // ============ 每日推荐状态（每天固定 5-8 篇，自动加载） ============
   const [dailyNews, setDailyNews] = useState<NewsItem[]>([]);
   const [dailyWiki, setDailyWiki] = useState<WikipediaArticle[]>([]);
   const [dailyBooks, setDailyBooks] = useState<GutenbergBook[]>([]);
+  const [dailyArticles, setDailyArticles] = useState<ArticleItem[]>([]);
   const [loadingDailyNews, setLoadingDailyNews] = useState(false);
   const [loadingDailyWiki, setLoadingDailyWiki] = useState(false);
   const [loadingDailyBooks, setLoadingDailyBooks] = useState(false);
+  const [loadingDailyArticles, setLoadingDailyArticles] = useState(false);
 
   // 切换语种时自动加载该语种的「今日推荐」（每天 5-8 篇）
   useEffect(() => {
@@ -149,6 +165,17 @@ export const ReadingHubPage = () => {
         }
       } else {
         setDailyBooks([]);
+      }
+      // 科技/长文每日推荐（Hacker News + Dev.to，仅英语）
+      if (supportsArticles(corpusLang)) {
+        setLoadingDailyArticles(true);
+        const arts = await fetchDailyArticles(corpusLang, 6);
+        if (!cancelled) {
+          setDailyArticles(arts);
+          setLoadingDailyArticles(false);
+        }
+      } else {
+        setDailyArticles([]);
       }
     };
     loadDaily();
@@ -290,6 +317,51 @@ export const ReadingHubPage = () => {
   // 点击某条新闻 → 转为阅读文章 → 进入阅读
   const handleOpenNews = (news: NewsItem) => {
     const article = newsToReadingArticle(news);
+    openExternalArticle(article);
+  };
+
+  // ============ 科技/长文相关函数 ============
+  // 拉取 Hacker News + Dev.to 最新文章
+  const handleLoadArticles = async () => {
+    setLoadingArticles(true);
+    setArticlesError('');
+    try {
+      const items = await fetchAllArticles(16);
+      setArticleItems(items);
+      if (items.length === 0) {
+        setArticlesError('文章拉取失败，请稍后重试');
+      }
+    } catch {
+      setArticlesError('网络异常，请稍后重试');
+    } finally {
+      setLoadingArticles(false);
+    }
+  };
+
+  // 按关键词在文章中筛选
+  const handleSearchArticles = async () => {
+    if (!articlesKeyword.trim()) {
+      handleLoadArticles();
+      return;
+    }
+    setLoadingArticles(true);
+    setArticlesError('');
+    try {
+      const items = await searchArticlesByKeyword(corpusLang, articlesKeyword.trim());
+      setArticleItems(items);
+      if (items.length === 0) {
+        setArticlesError(`未找到包含"${articlesKeyword}"的文章，试试其他关键词`);
+      }
+    } catch {
+      setArticlesError('文章搜索异常，请稍后重试');
+    } finally {
+      setLoadingArticles(false);
+    }
+  };
+
+  // 点击某篇文章 → 转为阅读文章 → 进入阅读
+  const handleOpenArticle = (item: ArticleItem) => {
+    const article = articleToReadingArticle(item);
     openExternalArticle(article);
   };
 
@@ -594,6 +666,40 @@ export const ReadingHubPage = () => {
               )}
             </div>
           )}
+
+          {/* 今日科技长文（Hacker News + Dev.to，仅英语） */}
+          {supportsArticles(corpusLang) && (
+            <div className="p-3 bg-white/60 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <BookOpen className="w-4 h-4 text-emerald-500" />
+                <h4 className="font-semibold text-gray-700 text-sm">今日科技长文 · {dailyArticles.length} 篇</h4>
+                {loadingDailyArticles && <Loader2 className="w-3 h-3 animate-spin text-emerald-500" />}
+              </div>
+              {dailyArticles.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {dailyArticles.map(item => (
+                    <button
+                      key={item.id}
+                      onClick={() => handleOpenArticle(item)}
+                      className="flex flex-col gap-1 p-2 bg-white rounded-lg border border-gray-100 hover:border-emerald-300 hover:shadow text-left transition-all group"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] text-emerald-500 font-bold">{item.sourceName}</span>
+                        <span className="text-[10px] text-gray-300">·</span>
+                        <span className="text-[10px] text-gray-400">{categoryLabels[item.category]}</span>
+                      </div>
+                      <p className="text-xs font-semibold text-gray-800 line-clamp-2 group-hover:text-emerald-600 transition-colors">{item.title}</p>
+                      <p className="text-[11px] text-gray-500 line-clamp-1">{item.description}</p>
+                    </button>
+                  ))}
+                </div>
+              ) : loadingDailyArticles ? (
+                <p className="text-xs text-gray-400">正在拉取今日科技长文…</p>
+              ) : (
+                <p className="text-xs text-gray-400">今日科技长文暂不可用，可在下方手动加载</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 手动探索更多 */}
@@ -602,7 +708,7 @@ export const ReadingHubPage = () => {
             <Search className="w-4 h-4 text-gray-400" />
             手动探索更多
           </h3>
-          <p className="text-xs text-gray-400">今日推荐之外，可按主题关键词即时搜索新闻 / Wikipedia，或加载完整 Gutenberg 书单</p>
+          <p className="text-xs text-gray-400">今日推荐之外，可按主题关键词即时搜索新闻 / Wikipedia / 科技长文，或加载完整 Gutenberg 书单</p>
         </div>
 
         {/* 主题搜索框 */}
@@ -718,6 +824,94 @@ export const ReadingHubPage = () => {
             ) : (
               <p className="text-xs text-gray-400">
                 点击「加载头条」拉取 {languageNames[corpusLang]} 最新新闻，支持按关键词筛选时事热点。每条新闻可进入精读模式，自动清洗 HTML 并按句分段。
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ============ 科技长文区块（Hacker News + Dev.to，仅英语） ============ */}
+        {supportsArticles(corpusLang) && (
+          <div className="card-gradient p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-emerald-500" />
+                <h3 className="text-lg font-bold text-gray-800">科技长文</h3>
+                <span className="text-xs text-gray-400">· Hacker News + Dev.to · 免 key 实时拉取</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleLoadArticles}
+                  disabled={loadingArticles}
+                  className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loadingArticles ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {articleItems.length > 0 ? '刷新文章' : '加载文章'}
+                </button>
+              </div>
+            </div>
+
+            {/* 关键词搜索 */}
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={articlesKeyword}
+                onChange={e => setArticlesKeyword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSearchArticles()}
+                placeholder="按关键词筛选文章（如 AI、programming、productivity）"
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 outline-none text-sm"
+              />
+              <button
+                onClick={handleSearchArticles}
+                disabled={loadingArticles}
+                className="px-4 py-2 bg-emerald-100 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-200 transition-colors disabled:opacity-50 flex items-center gap-1"
+              >
+                <Search className="w-4 h-4" />
+                筛选
+              </button>
+            </div>
+
+            {articlesError && (
+              <p className="text-sm text-red-500 mb-3">{articlesError}</p>
+            )}
+
+            {/* 文章列表 */}
+            {articleItems.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {articleItems.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => handleOpenArticle(item)}
+                    className="flex flex-col gap-1 p-3 bg-white rounded-lg border border-gray-100 hover:border-emerald-300 hover:shadow text-left transition-all group"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${categoryColors[item.category]}`}>
+                        {categoryLabels[item.category]}
+                      </span>
+                      <span className="text-[10px] text-gray-400">{item.sourceName}</span>
+                      {item.author && <span className="text-[10px] text-gray-400">· {item.author}</span>}
+                    </div>
+                    <h4 className="text-sm font-semibold text-gray-800 group-hover:text-emerald-600 transition-colors line-clamp-2">
+                      {item.title}
+                    </h4>
+                    <p className="text-xs text-gray-500 line-clamp-2 flex-1">{item.description}</p>
+                    <div className="flex items-center justify-between mt-1 pt-1 border-t border-gray-50">
+                      <span className="text-[10px] text-gray-400">
+                        {new Date(item.pubDate).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                      </span>
+                      <span className="text-[10px] text-emerald-500 group-hover:translate-x-0.5 transition-transform flex items-center gap-0.5">
+                        精读 <ArrowRight className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : loadingArticles ? (
+              <div className="flex items-center justify-center py-8 text-gray-400">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" /> 拉取中…
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">
+                点击「加载文章」拉取 Hacker News 与 Dev.to 的最新科技/编程长文，正文更完整，适合精读。支持按关键词筛选。
               </p>
             )}
           </div>
