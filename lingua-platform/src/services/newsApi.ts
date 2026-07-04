@@ -446,7 +446,7 @@ export const fetchDailyNews = async (
   count = 6
 ): Promise<NewsItem[]> => {
   const todayKey = getTodayKey();
-  const cacheKey = `daily_news_${language}_${todayKey}`;
+  const cacheKey = `daily_news_v3_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<NewsItem[]>(

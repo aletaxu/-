@@ -434,7 +434,7 @@ export const fetchDailyWikipediaArticles = async (
 ): Promise<WikipediaArticle[]> => {
   if (!supportsWikipedia(language)) return [];
   const todayKey = getTodayKey();
-  const cacheKey = `daily_wiki_${language}_${todayKey}`;
+  const cacheKey = `daily_wiki_v3_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<WikipediaArticle[]>(
@@ -473,7 +473,7 @@ export const fetchDailyGutenbergBooks = async (
 ): Promise<GutenbergBook[]> => {
   if (!supportsGutenberg(language)) return [];
   const todayKey = getTodayKey();
-  const cacheKey = `daily_gutenberg_${language}_${todayKey}`;
+  const cacheKey = `daily_gutenberg_v3_${language}_${todayKey}`;
 
   try {
     return await cachedFetch<GutenbergBook[]>(

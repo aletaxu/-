@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Clock, ArrowRight, Sparkles, Newspaper, Globe, BookMarked, Loader2, Search, Radio, Calendar } from 'lucide-react';
+import { cache } from '../utils/cache';
 import { readingArticles } from '../data/reading';
 import { languageNames, levelNames } from '../types';
 import type { Language, Level, ReadingCategory } from '../types';
@@ -131,6 +132,8 @@ export const ReadingHubPage = () => {
 
   // 切换语种时自动加载该语种的「今日推荐」（每天 5-8 篇）
   useEffect(() => {
+    // 先清理旧版每日推荐缓存（无 _v2_ 后缀），确保用最新筛选逻辑重新拉取
+    cache.clearStaleDailyCache();
     let cancelled = false;
     const loadDaily = async () => {
       // 新闻每日推荐
