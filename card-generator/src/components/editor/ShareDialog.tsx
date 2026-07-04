@@ -90,6 +90,7 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
     setDownloading(true);
     setIsExporting(true);
     try {
+      // 等两帧让 DOM 在关闭动效后完成重渲染
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       await new Promise((r) => requestAnimationFrame(() => r(null)));
       const meta = getThemeMeta(present.theme);
@@ -113,14 +114,32 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
   if (!open) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
+    <>
+      {/* 隐藏的导出专用画布：固定尺寸，不受弹窗布局影响，html2canvas 截图更稳定 */}
       <div
-        className="bg-paper rounded-2xl shadow-card w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        aria-hidden
+        style={{
+          position: "fixed",
+          left: "-9999px",
+          top: 0,
+          width: "600px",
+          pointerEvents: "none",
+          opacity: 1,
+        }}
       >
+        <div ref={exportRef} className="rounded-2xl overflow-hidden bg-paper">
+          <CardCanvas card={exportCard} editable={false} />
+        </div>
+      </div>
+
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        onClick={onClose}
+      >
+        <div
+          className="bg-paper rounded-2xl shadow-card w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* 头部 */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-line">
           <h3 className="text-sm font-semibold text-ink">分享 / 下载</h3>
@@ -170,7 +189,6 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
             <div className={`relative origin-top mx-auto ${effects.cardOpen && !isExporting ? "kayan-card-enter" : ""}`} style={{ maxWidth: "100%" }}>
               <CardCanvas
                 key={cardKey}
-                ref={exportRef}
                 card={isExporting ? exportCard : previewCard}
                 editable={false}
               />
@@ -224,8 +242,11 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
               )}
             </GhostButton>
             <GhostButton
-              onClick={() => {
-                if (!shareUrl) handleShare();
+              onClick={async () => {
+                // 必须先确保 shareUrl 已生成，再显示二维码
+                if (!shareUrl) {
+                  await handleShare();
+                }
                 setShowQr(true);
               }}
               className="w-full"
@@ -323,5 +344,6 @@ export function ShareDialog({ open, onClose }: ShareDialogProps) {
         )}
       </div>
     </div>
+    </>
   );
 }
