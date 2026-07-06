@@ -94,6 +94,20 @@ export interface EffectsConfig {
   particleStyle?: ParticleStyle;
 }
 
+// 信封配置：可选，配置后查看卡片时会先展示信封，点击翻盖打开再露出卡片
+export interface EnvelopeConfig {
+  enabled: boolean; // 是否启用信封
+  coverUrl: string; // 信封封面图（用户自定义或库图）
+  coverSource: "custom" | "library";
+  // 信封封面文字（可选，叠加显示在信封上）
+  recipientName: string; // 收件人（信封正中）
+  senderName: string; // 寄件人（信封左下角或背面）
+  stampUrl?: string; // 印章/邮票图（可选，右上角）
+  sealColor: string; // 封口颜色
+  // 打开动画时长（秒），0 表示无动画
+  openDuration?: number;
+}
+
 export interface CardState {
   id: string;
   theme: ThemeType;
@@ -108,6 +122,8 @@ export interface CardState {
   canvasRatio: CanvasRatio;
   // 动效开关（可选，旧数据通过 normalizeCard 补全为默认全开）
   effects?: EffectsConfig;
+  // 信封配置（可选，未配置时直接显示卡片）
+  envelope?: EnvelopeConfig | null;
   createdAt: string;
   // 最后更新时间（可选，用于草稿排序与相对时间展示）
   updatedAt?: string;

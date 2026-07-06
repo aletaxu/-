@@ -11,6 +11,7 @@ import type {
   ThemeType,
   CanvasRatio,
   EffectsConfig,
+  EnvelopeConfig,
 } from "../lib/types";
 
 // 动效默认配置：全部开启，让接收方第一次打开有惊喜感
@@ -20,6 +21,14 @@ export const DEFAULT_EFFECTS: EffectsConfig = {
   photoFloat: true,
   typewriter: true,
 };
+
+// 用户上传的信封封面图库条目
+export interface EnvelopeAsset {
+  id: string;
+  url: string; // dataURL
+  name: string;
+  addedAt: string;
+}
 
 // 默认卡片状态
 export function createDefaultCard(): CardState {
@@ -50,7 +59,22 @@ export function createDefaultCard(): CardState {
     },
     canvasRatio: "3:4",
     effects: { ...DEFAULT_EFFECTS },
+    envelope: null, // 默认不启用信封
     createdAt: new Date().toISOString(),
+  };
+}
+
+// 信封默认配置（启用信封时的初始值）
+export function createDefaultEnvelope(): EnvelopeConfig {
+  return {
+    enabled: true,
+    coverUrl: "",
+    coverSource: "library",
+    recipientName: "",
+    senderName: "",
+    stampUrl: "",
+    sealColor: "#D97757",
+    openDuration: 1.2,
   };
 }
 
@@ -70,6 +94,8 @@ export function normalizeCard(state: Partial<CardState> | null | undefined): Car
     freeTexts: Array.isArray(state.freeTexts) ? state.freeTexts : [],
     music: state.music ?? null,
     effects: { ...DEFAULT_EFFECTS, ...(state.effects ?? {}) },
+    // 信封配置：旧数据没有该字段，补 null（不启用）
+    envelope: state.envelope ?? null,
   };
 }
 
@@ -107,6 +133,8 @@ interface CardStore {
   genConfig: GenConfig;
   // 用户上传的音乐库（独立于卡片，持久化在本地）
   userMusics: Music[];
+  // 用户上传的信封封面图库（独立于卡片，持久化在本地）
+  userEnvelopes: EnvelopeAsset[];
   // 多卡片草稿列表（最多保留 20 个）
   savedDrafts: CardState[];
 
@@ -130,6 +158,11 @@ interface CardStore {
   setCanvasRatio: (r: CanvasRatio) => void;
   // 动效开关（部分更新，进入历史）
   setEffects: (patch: Partial<EffectsConfig>) => void;
+
+  // 信封配置（部分更新，进入历史）
+  setEnvelope: (patch: Partial<EnvelopeConfig>) => void;
+  // 启用/关闭信封（关闭时置 null，启用时给默认值）
+  toggleEnvelope: (enabled: boolean) => void;
 
   addPhoto: (photo: Photo) => void;
   updatePhoto: (id: string, patch: Partial<Photo>) => void;
@@ -159,6 +192,10 @@ interface CardStore {
   // 用户音乐库管理（不进历史，独立持久化）
   addUserMusic: (m: Music) => void;
   removeUserMusic: (id: string) => void;
+
+  // 用户信封图库管理（不进历史，独立持久化）
+  addUserEnvelope: (e: EnvelopeAsset) => void;
+  removeUserEnvelope: (id: string) => void;
 
   reset: () => void;
   loadCard: (state: CardState) => void;
@@ -193,6 +230,7 @@ export const useCardStore = create<CardStore>()(
         fontSize: 18,
       },
       userMusics: [],
+      userEnvelopes: [],
       savedDrafts: [],
 
       commit: (updater) => {
@@ -247,6 +285,19 @@ export const useCardStore = create<CardStore>()(
         get().commit((d) => ({
           ...d,
           effects: { ...DEFAULT_EFFECTS, ...d.effects, ...patch },
+        })),
+
+      // 信封配置：合并 patch（若当前为 null，先初始化为默认值再合并）
+      setEnvelope: (patch) =>
+        get().commit((d) => {
+          const base = d.envelope ?? createDefaultEnvelope();
+          return { ...d, envelope: { ...base, ...patch } };
+        }),
+      // 启用/关闭信封：关闭置 null，启用初始化默认值
+      toggleEnvelope: (enabled) =>
+        get().commit((d) => ({
+          ...d,
+          envelope: enabled ? d.envelope ?? createDefaultEnvelope() : null,
         })),
 
       addPhoto: (photo) =>
@@ -374,6 +425,28 @@ export const useCardStore = create<CardStore>()(
           return { userMusics };
         }),
 
+      // 用户信封图库：不进历史，直接更新本地库
+      addUserEnvelope: (e) =>
+        set((s) => ({ userEnvelopes: [...s.userEnvelopes, e] })),
+      removeUserEnvelope: (id) =>
+        set((s) => {
+          const userEnvelopes = s.userEnvelopes.filter((e) => e.id !== id);
+          // 若当前卡片正使用该信封图，同步清空引用
+          if (s.present.envelope?.coverUrl) {
+            const removed = s.userEnvelopes.find((e) => e.id === id);
+            if (removed && s.present.envelope.coverUrl === removed.url) {
+              return {
+                userEnvelopes,
+                present: {
+                  ...s.present,
+                  envelope: { ...s.present.envelope, coverUrl: "" },
+                },
+              };
+            }
+          }
+          return { userEnvelopes };
+        }),
+
       reset: () => set({ present: createDefaultCard(), past: [], future: [], selectedPhotoId: null, selectedFreeTextId: null }),
       loadCard: (state) =>
         set({ present: normalizeCard(state), past: [], future: [], selectedPhotoId: null, selectedFreeTextId: null }),
@@ -421,6 +494,7 @@ export const useCardStore = create<CardStore>()(
         present: s.present,
         genConfig: s.genConfig,
         userMusics: s.userMusics,
+        userEnvelopes: s.userEnvelopes,
         savedDrafts: s.savedDrafts,
       }) as CardStore,
     }

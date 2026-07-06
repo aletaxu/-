@@ -5,9 +5,10 @@ import { BackgroundTab } from "./tabs/BackgroundTab";
 import { MusicTab } from "./tabs/MusicTab";
 import { PhotoTab } from "./tabs/PhotoTab";
 import { EffectsTab } from "./tabs/EffectsTab";
-import { Palette, Type, Image, Music, Images, Sparkles } from "lucide-react";
+import { EnvelopeTab } from "./tabs/EnvelopeTab";
+import { Palette, Type, Image, Music, Images, Sparkles, Mail } from "lucide-react";
 
-type TabKey = "theme" | "text" | "background" | "music" | "photo" | "effect";
+type TabKey = "theme" | "text" | "background" | "music" | "photo" | "effect" | "envelope";
 
 const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "theme", label: "主题", icon: <Palette size={15} /> },
@@ -16,6 +17,7 @@ const TABS: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: "music", label: "音乐", icon: <Music size={15} /> },
   { key: "photo", label: "照片", icon: <Images size={15} /> },
   { key: "effect", label: "动效", icon: <Sparkles size={15} /> },
+  { key: "envelope", label: "信封", icon: <Mail size={15} /> },
 ];
 
 export function ControlPanel() {
@@ -53,6 +55,7 @@ export function ControlPanel() {
         {active === "music" && <MusicTab />}
         {active === "photo" && <PhotoTab />}
         {active === "effect" && <EffectsTab />}
+        {active === "envelope" && <EnvelopeTab />}
       </div>
     </div>
   );

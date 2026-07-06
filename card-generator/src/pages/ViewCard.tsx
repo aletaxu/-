@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { decodeCardFromUrl } from "../lib/urlCodec";
 import { getThemeMeta } from "../lib/constants";
 import { CardCanvas } from "../components/editor/CardCanvas";
+import { Envelope } from "../components/editor/Envelope";
 import { getPlayer, findMusic } from "@/lib/musicSynth";
 import { DEFAULT_EFFECTS, normalizeCard } from "@/store/cardStore";
 import { ParticleEffect } from "@/components/editor/ParticleEffect";
@@ -15,6 +16,8 @@ export default function ViewCard() {
   const [card, setCard] = useState<CardState | null>(null);
   const [error, setError] = useState(false);
   const [playing, setPlaying] = useState(false);
+  // 信封是否已打开：启用信封时先展示信封，打开后才显示卡片
+  const [envelopeOpened, setEnvelopeOpened] = useState(false);
 
   useEffect(() => {
     if (!data) {
@@ -26,7 +29,7 @@ export default function ViewCard() {
       setError(true);
       return;
     }
-    // 兜底：补齐缺失的 effects/freeTexts 等字段，兼容旧链接
+    // 兜底：补齐缺失的 effects/freeTexts/envelope 等字段，兼容旧链接
     setCard(normalizeCard(decoded));
     document.title = `卡言 · ${decoded.text.title || "电子卡片"}`;
     // 离开页面时停止音乐
@@ -78,6 +81,10 @@ export default function ViewCard() {
   const themeMeta = getThemeMeta(card.theme);
   // 动效开关（兜底默认全开）
   const effects = { ...DEFAULT_EFFECTS, ...card.effects };
+  // 是否启用信封：配置了 envelope 且 enabled
+  const envelopeEnabled = !!card.envelope?.enabled;
+  // 当前是否应显示信封（启用且未打开）
+  const showEnvelope = envelopeEnabled && !envelopeOpened;
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-canvas via-canvas to-paper">
@@ -100,36 +107,63 @@ export default function ViewCard() {
 
       {/* 卡片展示 */}
       <main className="flex-1 flex flex-col items-center justify-center px-5 py-4">
-        <div className="text-center mb-5">
-          <p className="text-xs text-muted mb-1">
-            {card.sender} 寄给 {card.recipient} 的一张电子卡片
-          </p>
-          <h1 className="font-display text-2xl font-semibold text-ink">
-            {themeMeta.emoji} {themeMeta.label}
-          </h1>
-        </div>
-
-        <div className={`relative w-full max-w-sm rounded-2xl overflow-hidden shadow-card bg-paper ${effects.cardOpen ? "kayan-card-enter" : ""}`}>
-          <CardCanvas card={card} editable={false} />
-          {effects.particles && <ParticleEffect theme={card.theme} style={effects.particleStyle ?? "auto"} />}
-        </div>
-
-        {card.music && (
-          <div className="mt-5 flex items-center gap-3">
-            <button
-              onClick={toggleMusic}
-              className="flex items-center gap-2 px-4 py-2 rounded-full bg-moss text-white text-sm font-medium shadow-soft hover:bg-moss-deep transition-colors"
-            >
-              {playing ? <Pause size={14} /> : <Play size={14} />}
-              {playing ? "暂停" : "播放"} {card.music.title}
-              <Music2 size={12} className="opacity-70" />
-            </button>
+        {showEnvelope ? (
+          /* 信封模式：先展示信封，点击打开后切换到卡片 */
+          <div className="flex flex-col items-center">
+            <div className="text-center mb-6">
+              <h1 className="font-display text-xl font-semibold text-ink">
+                你有一封新卡片 ✉️
+              </h1>
+              <p className="text-xs text-muted mt-1">
+                {card.sender} 寄给 {card.recipient}
+              </p>
+            </div>
+            <Envelope
+              envelope={card.envelope!}
+              onOpened={() => setEnvelopeOpened(true)}
+            />
           </div>
-        )}
+        ) : (
+          /* 卡片模式：直接展示卡片（未启用信封或信封已打开） */
+          <>
+            <div className="text-center mb-5">
+              <p className="text-xs text-muted mb-1">
+                {card.sender} 寄给 {card.recipient} 的一张电子卡片
+              </p>
+              <h1 className="font-display text-2xl font-semibold text-ink">
+                {themeMeta.emoji} {themeMeta.label}
+              </h1>
+            </div>
 
-        <p className="mt-6 text-[11px] text-muted">
-          这是一张由「卡言」生成的电子卡片 · 用心传递每一份祝福
-        </p>
+            <div
+              className={`relative w-full max-w-sm rounded-2xl overflow-hidden shadow-card bg-paper ${
+                effects.cardOpen && (!envelopeEnabled || envelopeOpened) ? "kayan-card-enter" : ""
+              }`}
+            >
+              <CardCanvas card={card} editable={false} />
+              {effects.particles && (
+                <ParticleEffect theme={card.theme} style={effects.particleStyle ?? "auto"} />
+              )}
+            </div>
+
+            {card.music && (
+              <div className="mt-5 flex items-center gap-3">
+                <button
+                  onClick={toggleMusic}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full bg-moss text-white text-sm font-medium shadow-soft hover:bg-moss-deep transition-colors"
+                >
+                  {playing ? <Pause size={14} /> : <Play size={14} />}
+                  {playing ? "暂停" : "播放"} {card.music.title}
+                  <Music2 size={12} className="opacity-70" />
+                </button>
+              </div>
+            )}
+
+            <p className="mt-6 text-[11px] text-muted">
+              这是一张由「卡言」生成的电子卡片 · 用心传递每一份祝福
+            </p>
+          </>
+        )}
       </main>
 
       <footer className="py-4 text-center">
